@@ -35,6 +35,11 @@ class HardenedBootstrapTests(unittest.TestCase):
     def call(self, name, args, scope=None):
         return self.bridge.call(name, args, client_scope=scope, require_bootstrap=True)
 
+    def test_arguments_must_be_objects_before_copying(self):
+        with self.assertRaises(ValueError):
+            self.bridge.call('hermes_read_file', [('path','fixture')])
+        self.assertEqual(self.native.call_count,0)
+
     def test_no_metadata_chats_do_not_inherit_transport_or_each_other(self):
         a = self.call('hermes_context', {'task': 'read file'})
         self.assertEqual(self.call('hermes_read_file', {'path': 'fixture'})['errorCode'], 'bootstrap_required')

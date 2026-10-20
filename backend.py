@@ -238,6 +238,8 @@ class Bridge:
     def call(self, name, arguments, approve=None, client_scope=None, require_bootstrap=False):
         if name not in self.specs:
             raise ValueError('未知工具')
+        if not isinstance(arguments, dict):
+            raise ValueError('工具參數必須是物件')
         from bootstrap_state import resolve_scope, new_client, prerequisites, record_instruction, record_search, same_cwd
         arguments = dict(arguments)
         token = arguments.pop('bootstrap_id', None) if require_bootstrap else None
