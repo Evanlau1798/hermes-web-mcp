@@ -1,4 +1,4 @@
-"""Manual decision boundary and small MCP contracts for background compaction."""
+"""Automatic send policy and backward-compatible manual compaction contracts."""
 OP = {'type': 'string', 'minLength': 8, 'maxLength': 80, 'pattern': '^[A-Za-z0-9_-]+$'}
 PREPARE = {'type': 'object', 'required': ['thread_id', 'expected_title', 'message', 'operation_id'], 'properties': {
     'thread_id': {'type': 'string', 'format': 'uuid'},
@@ -16,7 +16,10 @@ def dispatch(bridge, name, arguments):
         bridge.compact_jobs = CompactJobs(bridge.codex)
     args = dict(arguments)
     if name == 'prepare_send':
-        return bridge.compact_jobs.prepare(**args)
+        result = bridge.compact_jobs.prepare(**args)
+        if result.get('state') == 'awaiting_confirmation':
+            return bridge.compact_jobs.confirm(args['operation_id'], 'auto')
+        return result
     if name == 'confirm_send':
         args.pop('confirmed_by_user')
         return bridge.compact_jobs.confirm(**args)

@@ -1,6 +1,6 @@
 # Codex Desktop 橋接
 
-`bridge.cjs`、`cli.cjs`、`test.cjs` 均在此儲存庫內。橋接使用 PATH 上的 Node 標準庫，不需要 npm install，不讀取帳號憑證或磁碟對話紀錄。以下命令在 repo 根目錄執行。
+`bridge.cjs`、`cli.cjs`、`test.cjs` 均在此儲存庫內。橋接使用 PATH 上的 Node 標準庫，不需要 npm install，不讀取帳號憑證。Web 的 Python adapter 另從本機原生紀錄尾段讀取當前 turn 用量，僅對外回傳 token 數，不回傳對話內容。以下命令在 repo 根目錄執行。
 
 App Tools 查詢及 send，與 IPC owner 路由的 stop 保留原本的參數驗證、名稱核對、逾時、部分成功及結果不明語意。sub-agent 使用相同 read/status。每次重新探索唯一管道，Desktop 需開啟並登入。
 
@@ -26,7 +26,7 @@ node .\codex-status\cli.cjs resume '<thread UUID>' '<operation UUID>' '<完整�
 
 `accepted` 只表示受理；`unknown` 不自動重送。內部 IPC 協定不是穩定公開 API，Desktop 更新後先驗證只讀介面，再以另外授權的測試對話驗證控制。
 
-Web 的 Compact 傳訊流程使用 prepare／confirm／operation_status；內部 compact_start 只派送原生 `thread-follower-compact-thread`，不把 ACK 當完成。status 的 compactState 來自原生 turn items；背景等待新的 compact-only completed turn，再核對 baseline 後傳送原訊息。沒有原子 expected-turn 的 Desktop 協定仍有最後檢查與派送間的競態，請避免其他客戶端同時操作目標。CLI 不提供繞過人類選擇的 Compact 入口。
+Web Agent 對閒置對話的發訊或續跑意圖優先使用 prepare_send 自動判斷：最新完成 turn 非 Compact、當前上下文 >80000 tokens、最後完成距今 >30 分鐘才先壓縮，不另詢問。operation_status 唯讀等待；內部 compact_start 只派送原生 `thread-follower-compact-thread`，不把 ACK 當完成。status 的 compactState 來自原生 turn items；背景等待新的 compact-only completed turn，再核對 baseline 後傳送原訊息。沒有原子 expected-turn 的 Desktop 協定仍有最後檢查與派送間的競態，請避免其他客戶端同時操作目標。CLI 的底層送訊攔截改走 Web 自動流程，不另要求選擇 Compact。
 
 ```powershell
 node --test .\codex-status\test.cjs .\codex-status\test_diagnostics.cjs .\codex-status\test_cli.cjs

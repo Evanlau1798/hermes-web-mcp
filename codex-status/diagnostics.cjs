@@ -1,7 +1,7 @@
 const {randomUUID, createHash} = require('node:crypto');
 const reasons = {
   TARGET_CHANGED: ['指定 session 的狀態或最新 turn 已改變，未派送。', '重新查詢並讓使用者確認後，再準備新的操作。'],
-  COMPACT_CONFIRMATION_REQUIRED: ['此 session 需要先詢問是否進行 Compact，未傳訊。', '使用 codex_prepare_send 準備原訊息，再由使用者選擇 compact 或直接傳送。'],
+  COMPACT_CONFIRMATION_REQUIRED: ['此底層送訊需改走背景自動流程，未傳訊。', '呼叫 codex_prepare_send，依目前上下文與閒置時間自動決定是否先 Compact，不另詢問。'],
   THREAD_STATE_UNCONFIRMED: ['無法確認目標已載入且閒置；未傳送訊息。', '在 Desktop 載入對話後重新查證，notLoaded 不視為 idle。'],
   COMPLETION_TIME_UNCONFIRMED: ['缺少最新 turn 的真正 completedAt，無法套用閒置壓縮規則；未傳送訊息。', '確認 Desktop read_thread 是否提供 completedAt；不可用最後文字或檔案時間代替。'],
   COMPACT_UNCONFIRMED: ['需要真正的 Compact，但目前無法查證壓縮已成功；未傳送訊息。', '檢查原生壓縮狀態，不要以摘要或 /compact 訊息替代。'],

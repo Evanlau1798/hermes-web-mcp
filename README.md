@@ -91,11 +91,13 @@ capture 的 mode=som 回傳畫面與元素編號，mode=vision 回傳畫面，mo
 
 send／resume 必填 `operation_id`，例如本次產生的 UUID。相同操作沿用同一 ID；即使連線中斷或 MCP 重啟，也只查回既有紀錄，不再派送。以 `codex_delivery_status` 查閱回執；unknown 時核對 status/read 與 turnBaseline，不能改 ID 盲目重送。只有新的人類操作才使用新 ID。重複 ID 不比對或保存訊息／標題內容指紋，只回傳原紀錄並標記 messageContentVerified=false，本次內容不派送。送達紀錄存於忽略的 `runtime/codex-delivery.sqlite`，不保存訊息或標題。
 
-閒置對話傳訊使用 `codex_prepare_send(thread_id, expected_title, message, operation_id)`，取得最新完成時間與 `compactState`，向人類顯示目標、原訊息及是否已完成原生 Compact，再詢問是否先壓縮。依明確選擇呼叫 `codex_confirm_send(operation_id, choice, confirmed_by_user=true)`：`compact` 先壓縮再傳送、`send_without_compact` 直接傳送、`cancel` 取消。不要由模型代替人類選擇。
+使用者要求傳訊後，Web Agent 對閒置對話以 `codex_prepare_send(thread_id, expected_title, message, operation_id)` 啟動自動流程。最新已完成 turn 不是原生 Compact、目前上下文嚴格大於 80,000 tokens，且最後完成時間距今嚴格超過 30 分鐘時，先原生 Compact，再傳原訊息。不額外提醒或詢問是否壓縮；未滿足全部條件則直接傳送。
 
-確認後立即回傳背景操作回執，使用唯讀 `codex_operation_status(operation_id)` 等待。受理不代表壓縮完成；背景只在新的原生 contextCompaction turn 成功完成、前一個 turn 正是準備階段的 baseline、目標仍閒置時，才傳送 RAM 中保存的原訊息。最後的 delivery receipt 仍以 accepted／unknown 等實際狀態解讀，用回傳的獨立 `delivery_operation_id` 查 `codex_delivery_status`，不另行 send。重複確認與查詢不重送；MCP 重啟不恢復尚未傳送的訊息，需重新檢查並由人類確認。
+`contextUsage.contextTokens` 取自本機原生用量紀錄中，與最新 turn ID 相符的 `last_token_usage.total_tokens`，不是歷史累計 `total_token_usage`。查詢僅讀取有界的紀錄尾段，對外不回傳對話內容。讀不到、紀錄不完整或 turn 不符時回傳 null，不猜測、不自動壓縮。`codex_confirm_send` 保留給人類明確指定的手動操作，相容既有客戶端。
 
-一般 send／resume 超過 30 分鐘閒置時回報 `COMPACT_CONFIRMATION_REQUIRED`，改走上述流程；active session 保留正常傳訊行為。原生 Compact 派送前核對兩次 idle 與 baseline；Desktop 協定沒有原子 expected-turn 條件，無法保證其他客戶端不在兩次檢查後介入。不要同時操作同一目標。狀態不明、介入或逾時時不傳送原訊息。
+啟動後立即回傳背景操作回執，使用唯讀 `codex_operation_status(operation_id)` 等待。受理不代表壓縮完成；背景只在新的原生 contextCompaction turn 成功完成、前一個 turn 正是準備階段的 baseline、目標仍閒置時，才傳送 RAM 中保存的原訊息。最後的 delivery receipt 仍以 accepted／unknown 等實際狀態解讀，用回傳的獨立 `delivery_operation_id` 查 `codex_delivery_status`，不另行 send。重複呼叫與查詢不重送；MCP 重啟不恢復尚未傳送的訊息，需重新檢查並由人類重新要求傳訊。
+
+active session 保留正常傳訊行為。原生 Compact 派送前核對兩次 idle 與 baseline；Desktop 協定沒有原子 expected-turn 條件，無法保證其他客戶端不在兩次檢查後介入。不要同時操作同一目標。狀態不明、介入或逾時時不傳送原訊息。
 
 list／status／read 失敗回傳 `stage`、`errorCode`、`requestId`、`observedAt`、`source`／`tool`、`requestState`、`deliveryState`、逾時／斷線旗標與建議處置。明確失敗、尚未送出與結果不明分開；底層私密錯誤只保留分類、可安全揭露的原生錯誤碼及指紋。notLoaded 不代表閒置，查詢失敗不回退成歷史快照。
 

@@ -5,6 +5,16 @@ import time
 from datetime import datetime
 
 
+def should_compact(data, now=None):
+    tokens = data.get('contextUsage', {}).get('contextTokens')
+    value = data.get('latestTurn', {}).get('completedAt')
+    if not valid_timestamp(value) or isinstance(tokens, bool) or not isinstance(tokens, int) or tokens <= 80000:
+        return False
+    seconds = (value / 1000 if value >= 1_000_000_000_000 else value) if isinstance(value, (int, float)) else datetime.fromisoformat(value.replace('Z', '+00:00')).timestamp()
+    return (data.get('compactState', {}).get('lastTurnIsCompaction') is False
+            and (time.time() if now is None else now) - seconds > 1800)
+
+
 def valid_timestamp(value):
     if isinstance(value, bool):
         return False

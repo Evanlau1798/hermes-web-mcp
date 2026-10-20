@@ -94,6 +94,9 @@ class CodexAdapter:
             data = json.loads(result.stdout)
             if not isinstance(data, dict):
                 raise ValueError('invalid envelope')
+            if action in ('status', 'read') and arguments.get('thread_id') and isinstance(data.get('thread'), dict) and data['thread'].get('id') == arguments['thread_id']:
+                from context_usage import read_context_usage
+                data['contextUsage'] = read_context_usage(arguments['thread_id'], (data.get('latestTurn') or {}).get('id'))
             return data
         except (ValueError, UnicodeError):
             return self._error('INVALID_BRIDGE_OUTPUT', 'parse', request_id, True, not mutation)

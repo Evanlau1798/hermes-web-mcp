@@ -183,6 +183,6 @@ def context(specs, cwd=None, task=''):
                          'lifetime': '同一 MCP 程序，可跨 Web 對話查詢；重啟不恢復，不建立排程或主動發訊。',
                          'workflow': 'start → tracking_id → status(after_sequence) → stop；mode=manual 或 task_complete，可設期限。'},
             'codex_delivery': {'receipt': 'codex_delivery_status', 'operation_id_required': True,
-                               'compact': 'prepare_send → 顯示完成時間／原生 Compact 狀態並詢問人類 → confirm_send → 唯讀 operation_status；背景查證原生完成後傳送原訊息。'},
+                               'compact': '使用者要求傳訊 → prepare_send 自動判斷：最新完成 turn 非 Compact、目前上下文 >80000 tokens、完成距今 >30 分鐘三者皆成立才先壓縮；不額外提醒或詢問。其餘直接傳送。唯讀 operation_status 等待；原生 Compact 確認完成後才傳原訊息。'},
             'computer_use': {'exposed': True, 'tool': 'hermes_computer_use',
                              'workflow': 'list_windows → capture(mode=som) → element 操作；capture_after=true 取得結果畫面。'}}

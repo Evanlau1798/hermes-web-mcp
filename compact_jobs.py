@@ -6,7 +6,7 @@ import time
 import uuid
 from contextlib import contextmanager
 from pathlib import Path
-from compact_state import valid_timestamp
+from compact_state import valid_timestamp, should_compact
 
 
 class CompactJobs:
@@ -154,6 +154,7 @@ class CompactJobs:
                 'completed_at': completed_at, 'compacted': compact['lastTurnIsCompaction'],
                 'compact_turn_id': compact.get('turnId'),
                 'compact_completed_at': compact_completed_at,
+                'auto_compact': should_compact(data),
                 'native_compaction_item_seen': compact.get('nativeCompactionItemSeen')}, None
 
     @staticmethod
@@ -257,7 +258,7 @@ class CompactJobs:
                                               (operation_id,)).fetchone()))
 
     def confirm(self, operation_id, choice='compact'):
-        if choice not in ('compact', 'send_without_compact', 'cancel'):
+        if choice not in ('auto', 'compact', 'send_without_compact', 'cancel'):
             return self._error('INVALID_CHOICE')
         with self.lock:
             row = self._row(operation_id)
@@ -285,6 +286,9 @@ class CompactJobs:
         if not self._same_baseline(current, row):
             self._reject(operation_id, 'BASELINE_CHANGED')
             return self._view_for_id(operation_id)
+        if choice == 'auto':
+            choice = 'compact' if current['auto_compact'] else 'send_without_compact'
+            self._update(operation_id, choice=choice)
         with self.lock:
             current_row = self._row(operation_id)
             if self.closed or current_row['state'] != 'confirming':

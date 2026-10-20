@@ -18,6 +18,8 @@ class FeatureIntegrationTests(unittest.TestCase):
                 'expected_title': 'Exact title', 'message': '原訊息 English', 'operation_id': 'operation-test'}
         bridge.call('codex_prepare_send', args)
         jobs.prepare.assert_called_once_with(**args)
+        jobs.confirm.assert_called_once_with('operation-test', 'auto')
+        jobs.confirm.reset_mock()
         bridge.call('codex_confirm_send', {'operation_id': 'operation-test', 'choice': 'compact', 'confirmed_by_user': True})
         jobs.confirm.assert_called_once_with(operation_id='operation-test', choice='compact')
         result = bridge.call('codex_operation_status', {'operation_id': 'operation-test'})
