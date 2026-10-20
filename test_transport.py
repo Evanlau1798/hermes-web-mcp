@@ -44,7 +44,8 @@ asyncio.run(server.main())'''
                 async with ClientSession(*streams) as client:
                     await client.initialize()
                     catalog = (await client.list_tools()).tools
-                    self.assertEqual(len(catalog), 26)
+                    self.assertEqual(len(catalog), 27)
+                    self.assertEqual(next(t for t in catalog if t.name == 'browser_use').title, 'browser use')
                     reading = next(t for t in catalog if t.name == 'hermes_process_read')
                     self.assertTrue(reading.annotations.read_only_hint)
                     self.assertFalse(reading.annotations.destructive_hint)

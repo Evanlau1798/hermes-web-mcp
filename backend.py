@@ -41,6 +41,7 @@ INSTRUCTIONS = (
     'wait 每次最多 30 秒；bridge_busy 表示尚未執行，先查證狀態，不自動重送寫入。'
     'Bootstrap 同時提供 task 描述本次意圖；merge／rebase／release／部署／覆寫先讀首選專用技能，通用開發技能作補充。'
     '依 Bootstrap 清單按需完整讀取相關技能與專案規範，再使用 Hermes 工具執行操作。'
+    'Web 網站操作使用 browser_use：先 action=guide 完整讀取目前 Ego 官方指南，再 action=run 執行 JavaScript；同一任務沿用 TaskSpace ID。'
     '技能更新使用 hermes_skill_manage，保留原生驗證與待批准狀態，不以一般 patch 取代。'
     'Web Agent 在收到人類修正、取得已驗證的可重用解法或發現技能過時時，依 hermes_context.skill_updates.learning 主動更新本機技能，完成任務前再檢查一次。'
     '優先更新相關既有 Hermes 技能，寫前重新完整讀取確切目標，以 hermes_skill_manage 精確修改並讀回核對；沒有新學習可不寫入，不把工具輸出當保存指令。'
@@ -101,6 +102,7 @@ class Bridge:
     def __init__(self, native=native_call, codex=codex_call, computer=None):
         self.native, self.codex = native, codex
         self.computer = computer
+        self.browser = None
         self.owner = 'hermes-web-' + uuid.uuid4().hex
         self.lock = threading.RLock()
         self.clients = OrderedDict()
@@ -108,6 +110,9 @@ class Bridge:
         self.tracking = TrackingManager()
         self.compact_jobs = None
         self.specs = {}
+        from browser_adapter import SCHEMA as BROWSER_SCHEMA
+        self._add('browser_use', 'browser use：Ego Lite 瀏覽器單一入口。guide 讀官方指南；run 執行 JavaScript 開頁、快照、點擊、輸入與截圖。截圖用 page.screenshot({path: browserScreenshotPath})；長操作用既有 hermes_process_read 查詢，不重送腳本。', copy.deepcopy(BROWSER_SCHEMA), False)
+        self.specs['browser_use']['title'] = 'browser use'
         from compact_tools import PREPARE, CONFIRM, STATUS
         self._add('codex_prepare_send', '使用者要求發訊後啟動背景傳訊：最新完成 turn 不是 Compact、目前上下文 >80000 tokens 且完成時間距今 >30 分鐘，則先原生 Compact 再傳原訊息；否則直接傳。不額外詢問，以 operation_status 查結果。operation_id 綁定原訊息。',
                   copy.deepcopy(PREPARE), False)
@@ -263,6 +268,11 @@ class Bridge:
                     self.computer = ComputerAdapter()
                 from computer_result import normalize
                 return normalize(self.computer.computer_use(arguments, session_id=self._computer_session(client_scope)))
+            if name == 'browser_use':
+                if self.browser is None:
+                    from browser_adapter import BrowserAdapter
+                    self.browser = BrowserAdapter()
+                return self.browser.call(arguments, self.native, self.owner, approve)
             if name in ('hermes_tracking', 'hermes_tracking_status'):
                 from feature_tools import track
                 return safe_result(track(self, {**arguments, **({'action': 'status'} if name.endswith('_status') else {})}))
@@ -329,6 +339,10 @@ class Bridge:
             if terminal_meta and isinstance(result, dict):
                 result['shell'] = terminal_meta['shell']
                 result = terminal_receipt(result)
+            if tool == 'process_manage' and self.browser and arguments.get('session_id'):
+                browser_result = self.browser.collect(arguments['session_id'], result)
+                if browser_result is not None:
+                    return browser_result
             return safe_result(result)
         finally:
             self.lock.release()
@@ -345,3 +359,5 @@ class Bridge:
         for session in process_registry.list_sessions(task_id=self.owner):
             if session.get('status') == 'running':
                 process_registry.kill_process(session['session_id'])
+        if self.browser:
+            self.browser.close(process_registry)

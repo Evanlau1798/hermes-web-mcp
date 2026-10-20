@@ -184,5 +184,6 @@ def context(specs, cwd=None, task=''):
                          'workflow': 'start → tracking_id → status(after_sequence) → stop；mode=manual 或 task_complete，可設期限。'},
             'codex_delivery': {'receipt': 'codex_delivery_status', 'operation_id_required': True,
                                'compact': '使用者要求傳訊 → prepare_send 自動判斷：最新完成 turn 非 Compact、目前上下文 >80000 tokens、完成距今 >30 分鐘三者皆成立才先壓縮；不額外提醒或詢問。其餘直接傳送。唯讀 operation_status 等待；原生 Compact 確認完成後才傳原訊息。'},
+            'browser_use': {'tool': 'browser_use', 'workflow': 'guide → run(code)：完整讀目前版本指南，以官方 JavaScript 操作 Ego Lite。同一任務只用一個 TaskSpace，後續沿用 ID 與分頁標籤。截圖用 page.screenshot({path: browserScreenshotPath})；長操作用 hermes_process_read 查詢，完成後 finish。'},
             'computer_use': {'exposed': True, 'tool': 'hermes_computer_use',
                              'workflow': 'list_windows → capture(mode=som) → element 操作；capture_after=true 取得結果畫面。'}}

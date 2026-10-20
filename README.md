@@ -67,6 +67,8 @@ output 保留原生合併輸出，stdout 提供同值別名，streams_merged=tru
 
 所有桌面操作共用一個 `hermes_computer_use`，以 action 選擇動作。
 
+網站操作另用單一 `browser_use`（顯示名稱 **browser use**），沿用同一 MCP／Tunnel。先 `{"action":"guide"}` 讀本機 Ego 官方指南，再 `{"action":"run","code":"..."}` 執行 JavaScript；同一任務沿用一個 TaskSpace ID。Ego 每次執行都是新 Node.js 程序，JS 變數不保留。截圖用 `await page.screenshot({path: browserScreenshotPath})`，MCP 直接回傳 PNG。長工作以回執 `session_id` 使用既有 process_read 查詢，結束時回傳截圖；原生命令防護與程序所有權照常保留，結果不明不重送。此官方 JS runtime 具本機 Node.js 能力，並非瀏覽器沙箱。
+
 | action | 使用方式 |
 | --- | --- |
 | list_apps / list_windows | 找到應用程式及視窗的 app_name、pid、window_id |

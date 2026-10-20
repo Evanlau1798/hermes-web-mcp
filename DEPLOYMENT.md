@@ -124,17 +124,21 @@ $healthUrl = (Get-Content -LiteralPath (Join-Path $runtime 'health.url') -Raw).T
 Invoke-WebRequest "$healthUrl/readyz" -TimeoutSec 10
 ```
 
-健康檢查需回 200；PID／啟動回執只證明程序存在。`health.url` 隨程序更新，不固定埠。失敗先查 `runtime/launcher.error.log` 與程序狀態，不反覆啟動相同 Tunnel。WMI 隱藏 launcher 在目前帳號下啟動，保留路徑核對、mutex 與來源 Job 隔離；只額外傳遞呼叫端的 PATH 與三個 `HERMES_MCP_*` 執行檔設定，不將 API key 放進 WMI 命令列。
+健康檢查需回 200；PID／啟動回執只證明程序存在。`health.url` 隨程序更新，不固定埠。失敗先查 `runtime/launcher.error.log` 與程序狀態，不反覆啟動相同 Tunnel。WMI 隱藏 launcher 在目前帳號下啟動，保留路徑核對、mutex 與來源 Job 隔離；只額外傳遞呼叫端的 PATH 與 `HERMES_MCP_*` 執行檔設定，不將 API key 放進 WMI 命令列。
 
 到 ChatGPT Plugins → Add custom MCP server → Connection: Tunnel，選專用 Tunnel，名稱 `Hermes`，保持私人、不分享。身分驗證沿用 Tunnel，不另建 OAuth；工具選 Allow all，產品端若仍確認，不藉此移除本機防護。
 
 外掛簡介：
 
-> Hermes MCP 預設供 ChatGPT Web 使用。Web 端涉及 Hermes、Codex 或 Windows 本機操作時，先呼叫 hermes_context 取得導引與技能清單，按需搜尋／讀取技能，再使用檔案、PowerShell、程序、電腦操作、Codex 對話及共用記憶工具。本機原生 Codex 使用自己的工具，只有人類使用者明確要求時才調用 Hermes 整合。
+> Hermes MCP 預設供 ChatGPT Web 使用。Web 端涉及 Hermes、Codex、Windows 本機或網站操作時，先呼叫 hermes_context 取得導引與技能清單，按需完整讀取技能。網站任務使用單一 browser_use：guide 讀 Ego 官方指南，再 run 執行 JavaScript；同一任務沿用 TaskSpace ID，長工作以 hermes_process_read 查詢。其他任務使用檔案、PowerShell、程序、電腦操作、Codex 對話及共用記憶工具。閒置傳訊使用 codex_prepare_send，依 context 的三條件自動判斷是否 Compact，再以 codex_operation_status 等待；不另詢問。本機原生 Codex 使用自己的工具，只有人類使用者明確要求時才調用 Hermes 整合。
 
-在新 Web 對話先 `hermes_context`，確認 26 個工具包含 prepare／confirm／operation_status、process_read、computer_use。檔案與程序測試使用獨立 fixture；記憶測試使用可辨識條目並刪除；Computer Use 使用獨立測試視窗。Codex 先只讀 list/status，控制只用人類另行授權的測試對話，不用原工作或 Pro 模型。
+新增工具後若 context 已顯示 browser_use，但 Web 無法發現可呼叫的工具，到現有 Hermes 外掛的 Manage → Refresh tools 同步目錄，核對只新增 browser_use，再開獨立 Web 對話驗證；沿用原有連線與權限。
 
-Compact 的 `confirmed_by_user` 是代理對既有選擇的聲明，不是身分憑證／宿主批准。Web agent 必須等人類選擇才 confirm；不另發 elicitation。送達以回傳的 `delivery_operation_id` 查證，不自行組合 ID。
+在新 Web 對話先 `hermes_context`，確認 27 個工具包含 prepare／confirm／operation_status、process_read、computer_use、browser_use。檔案與程序測試使用獨立 fixture；記憶測試使用可辨識條目並刪除；Computer Use 使用獨立測試視窗。Codex 先只讀 list/status，控制只用人類另行授權的測試對話，不用原工作或 Pro 模型。
+
+browser use 另需同一 Windows 帳號已安裝並初始化 Ego Lite。執行檔依 `HERMES_MCP_EGO_BROWSER`（有效絕對 `.exe` 路徑）、PATH、使用者目錄下 `.local/share/ego/active_version_dir/ego-browser.exe` 尋找，無需固定版本目錄。launcher 會轉送此非機密設定。依官方指南操作獨立 TaskSpace，測試 guide、開頁、快照、點擊、繁體中文填寫與截圖；原有 MCP 新增一個工具即可，不另建 Tunnel。執行中的腳本留在忽略的 `tmp/browser-use/`，正常完成並查詢後清除；結果不明先查程序，不重新執行腳本。MCP 異常退出留下的目錄僅能在確認相關操作已停止後清除。
+
+相容的手動 `codex_confirm_send` 仍要求人類已明確選擇，`confirmed_by_user` 是代理對該選擇的聲明，不是身分憑證／宿主批准。預設 Web 傳訊使用 prepare_send 自動流程，不另發 Compact 選擇詢問或 elicitation。送達以回傳的 `delivery_operation_id` 查證，不自行組合 ID。
 
 ## 6. 登入自啟動
 

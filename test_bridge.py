@@ -18,7 +18,7 @@ class BridgeTests(unittest.TestCase):
         self.bridge = Bridge(native=lambda name, args, **kw: self.calls.append((name, args, kw)) or '{}')
 
     def test_inventory_and_native_schema_validation(self):
-        expected = {'hermes_read_file', 'hermes_search_files', 'hermes_write_file', 'hermes_patch',
+        expected = {'browser_use', 'hermes_read_file', 'hermes_search_files', 'hermes_write_file', 'hermes_patch',
                     'hermes_terminal', 'hermes_process_manage', 'hermes_process_read', 'hermes_memory_read', 'hermes_memory_edit',
                     'codex_list', 'codex_status', 'codex_read', 'codex_send', 'codex_resume', 'codex_stop',
                     'hermes_context', 'hermes_skills_list', 'hermes_skill_read', 'hermes_computer_use',

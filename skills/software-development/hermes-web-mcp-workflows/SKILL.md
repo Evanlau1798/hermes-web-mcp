@@ -1,11 +1,22 @@
 ---
 name: hermes-web-mcp-workflows
-description: Hermes Web MCP 技能更新、Codex 傳訊查證、Computer Use／Codex 持續追蹤的操作導引。
+description: Hermes Web MCP：browser use、技能更新、Codex 傳訊與持續追蹤。
 ---
 
 # Hermes Web MCP 工作流程
 
 ChatGPT Web 先呼叫 hermes_context，再使用此入口。本機原生 Codex 僅依人類明確要求使用 Hermes 整合。
+
+## 瀏覽器 browser use
+
+網站任務使用 browser_use。先 action=guide 完整讀取本機目前版本的 Ego 官方指南，再以 action=run、code 執行官方 JavaScript。
+同一任務建立一次 TaskSpace，印出 spaceId；後續用 taskSpace(spaceId) 和既有分頁標籤接續。每次 run 都是新 Node.js 程序，變數不跨次保存。
+開頁後讀 snapshot，使用觀測到的元素參照 click/fill 等，等待預期結果並回傳下一個 snapshot。中文直接寫在 code，工具會以 UTF-8 腳本執行。
+截圖使用 await page.screenshot({path: browserScreenshotPath})，工具直接回傳圖片。長工作沿用回執 session_id，以 hermes_process_read(action=poll/log) 查詢，最後一次查詢會附上截圖；需要停止時用既有 hermes_process_manage。
+每次 run 先完整讀取工具回執，若是內容參照先取得原文。status=exited 時直接使用該回執的圖片；僅 running/timeout 才查詢程序。圖片隨首次完成回執回傳，後續重複 poll 不再回傳同張圖片；log 用於完整文字輸出，poll 用於完成狀態與圖片。
+宿主若以 content_items 包裝 MCP 內容，依實際結構取出 type=image 的區塊，在同一次宿主執行中以圖片 helper 顯示其 data URL（data:<mimeType>;base64,<data>）；不要對非陣列 content 呼叫 map，也不要只回報圖片路徑。顯示後再核對畫面。
+guide 結果若有截短先查完整輸出，不將缺少指南結尾視為讀完。結果不明先查程序與頁面，不重送原腳本。
+使用者接管時按官方指南 handOff，完成後再續接同一個 Space；任務成功最後呼叫 finish({keep:[]})，只保留使用者需要的結果頁。
 
 ## 技能更新
 
