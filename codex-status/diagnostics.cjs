@@ -1,0 +1,54 @@
+const {randomUUID, createHash} = require('node:crypto');
+const reasons = {
+  TARGET_CHANGED: ['指定 session 的狀態或最新 turn 已改變，未派送。', '重新查詢並讓使用者確認後，再準備新的操作。'],
+  COMPACT_CONFIRMATION_REQUIRED: ['此 session 需要先詢問是否進行 Compact，未傳訊。', '使用 codex_prepare_send 準備原訊息，再由使用者選擇 compact 或直接傳送。'],
+  THREAD_STATE_UNCONFIRMED: ['無法確認目標已載入且閒置；未傳送訊息。', '在 Desktop 載入對話後重新查證，notLoaded 不視為 idle。'],
+  COMPLETION_TIME_UNCONFIRMED: ['缺少最新 turn 的真正 completedAt，無法套用閒置壓縮規則；未傳送訊息。', '確認 Desktop read_thread 是否提供 completedAt；不可用最後文字或檔案時間代替。'],
+  COMPACT_UNCONFIRMED: ['需要真正的 Compact，但目前無法查證壓縮已成功；未傳送訊息。', '檢查原生壓縮狀態，不要以摘要或 /compact 訊息替代。'],
+  DESKTOP_PIPE_MISSING: ['找不到 Codex Desktop 工具 pipe；無法確認 Desktop 是否開啟。', '開啟並登入 Codex Desktop，再重新查詢。'],
+  DESKTOP_PIPE_AMBIGUOUS: ['找到多個 Desktop pipe，無法安全選擇。', '確認執行中的 Desktop 實例；不要猜測目標。'],
+  PERMISSION_DENIED: ['系統拒絕存取 Desktop 連線。', '確認兩端使用同一 Windows 帳號與相容的權限層級。'],
+  CONNECTION_FAILED: ['Desktop 連線建立失敗。', '確認 Desktop 已開啟、登入且未在重新啟動。'],
+  CONNECTION_CLOSED: ['Desktop 連線已中斷，結果未確認。', '重新查詢；寫入結果不明時先查證，不要重送。'],
+  DESKTOP_TIMEOUT: ['Desktop 未在期限內回覆；不能判定 session 閒置。', '稍後重新查詢；不要自動重送寫入。'],
+  PROTOCOL_INVALID: ['Desktop 回傳的協定或資料格式無效。', '確認 Desktop 版本與橋接相容，保留 requestId 供排查。'],
+  CAPABILITY_UNAVAILABLE: ['Desktop 未提供所需工具或協定能力。', '確認 Desktop 版本及目前可用工具。'],
+  THREAD_NOT_LOADED: ['Desktop 回報 thread notLoaded；不代表 session 閒置或已完成。', '在 Desktop 確認此對話的實際載入與工作狀態。'],
+  THREAD_NOT_FOUND: ['Desktop 找不到指定對話。', '用 codex_list 重新核對完整 ID 與名稱。'],
+  BRIDGE_BUSY: ['Desktop 橋接忙碌，本次查詢未完成。', '稍後重新查詢；勿重送結果不明的寫入。'],
+  DESKTOP_REJECTED: ['Desktop 明確回報操作失敗，但未提供可安全揭露的具體原因。', '保留 requestId 與錯誤碼，檢查 Desktop 狀態。'],
+};
+function classify(value, fallback='DESKTOP_REJECTED') {
+  const s=String(value ?? '');
+  if (/method.?not.?found|unsupported|incompatible|request-version-mismatch/i.test(s)) return 'CAPABILITY_UNAVAILABLE';
+  if (/not.?loaded/i.test(s)) return 'THREAD_NOT_LOADED';
+  if (/not.?found|does not exist|no (?:codex )?(?:thread|conversation|session|rollout) found|unable to find (?:thread|conversation)/i.test(s)) return 'THREAD_NOT_FOUND';
+  if (/bridge_busy|\bbusy\b/i.test(s)) return 'BRIDGE_BUSY';
+  if (/EACCES|EPERM|permission|access denied/i.test(s)) return 'PERMISSION_DENIED';
+  return fallback;
+}
+function fault(code, stage, details={}) {
+  const [message, suggestedAction]=reasons[code] ?? [code, '保留 requestId 並查證狀態。'];
+  return Object.assign(new Error(message), {code,stage,source:'codex-desktop-live',
+    observedAt:new Date().toISOString(),requestId:`hermes-${randomUUID()}`,
+    timedOut:code==='DESKTOP_TIMEOUT',disconnected:['CONNECTION_FAILED','CONNECTION_CLOSED'].includes(code),
+    automaticRetrySafe:false,suggestedAction,...details});
+}
+function remoteFault(value, stage, details={}) {
+  const raw=JSON.stringify(value ?? {});
+  // Raw tool errors may contain conversation text, paths or credentials; retain only classified context.
+  const code=value?.code===-32601?'CAPABILITY_UNAVAILABLE':classify(raw);
+  const nativeCode=value?.code ?? value?.error?.code;
+  return fault(code,stage,{requestState:'rejected',deliveryState:'failed',
+    causeFingerprint:createHash('sha256').update(raw).digest('hex').slice(0,16),
+    ...(typeof nativeCode==='number' || typeof nativeCode==='string' && /^[A-Z][A-Z0-9_]{1,48}$/.test(nativeCode)?{nativeCode}:{}),...details});
+}
+function envelope(e, defaults={}) {
+  const keys=['code','stage','source','observedAt','requestId','tool','nativeCode','causeFingerprint',
+    'timedOut','disconnected','automaticRetrySafe','suggestedAction','requestState','deliveryState','threadId'];
+  const result={ok:false,...defaults,...Object.fromEntries(keys.filter(k=>e[k]!==undefined).map(k=>[k,e[k]]))};
+  result.errorCode=result.code ?? 'BRIDGE_ERROR';
+  result.error=reasons[e.code]?.[0] ?? defaults.error ?? '橋接未能完成操作；具體原因不明。';
+  return result;
+}
+module.exports={fault,remoteFault,envelope,classify};

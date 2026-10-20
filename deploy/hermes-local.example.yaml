@@ -1,0 +1,17 @@
+config_version: 1
+control_plane:
+  base_url: "https://api.openai.com"
+  tunnel_id: "REPLACE_WITH_YOUR_TUNNEL_ID"
+  api_key: "env:CONTROL_PLANE_API_KEY"
+health:
+  listen_addr: "127.0.0.1:0"
+  url_file: "runtime/health.url"
+admin_ui:
+  open_browser: false
+log:
+  level: info
+  format: json
+mcp:
+  commands:
+    - channel: main
+      command: "REPLACE_WITH_QUOTED_PYTHON_AND_SERVER_COMMAND"

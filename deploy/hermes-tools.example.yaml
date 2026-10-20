@@ -1,0 +1,4 @@
+{
+  "terminal": {"backend": "local", "cwd": "."},
+  "computer_use": {"permission_mode": "standard"}
+}
