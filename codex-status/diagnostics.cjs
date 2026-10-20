@@ -1,5 +1,7 @@
 const {randomUUID, createHash} = require('node:crypto');
 const reasons = {
+  NATIVE_PAGINATION_LIMIT: ['要求的 offset 超出 Desktop 可讀取的有界快照；不代表找不到對話。', '縮小查詢 offset；已知 thread_id 時直接 status/read。Desktop 無 cursor，勿重試相同深頁。'],
+  NATIVE_ARGUMENTS_INVALID: ['Desktop 拒絕工具參數；本次未完成查詢。', '依 Desktop 工具 schema 調整參數；保留 requestId，不重試相同參數。'],
   TARGET_CHANGED: ['指定 session 的狀態或最新 turn 已改變，未派送。', '重新查詢並讓使用者確認後，再準備新的操作。'],
   COMPACT_CONFIRMATION_REQUIRED: ['此底層送訊需改走背景自動流程，未傳訊。', '呼叫 codex_prepare_send，依目前上下文與閒置時間自動決定是否先 Compact，不另詢問。'],
   THREAD_STATE_UNCONFIRMED: ['無法確認目標已載入且閒置；未傳送訊息。', '在 Desktop 載入對話後重新查證，notLoaded 不視為 idle。'],
@@ -20,6 +22,7 @@ const reasons = {
 };
 function classify(value, fallback='DESKTOP_REJECTED') {
   const s=String(value ?? '');
+  if (/invalid.{0,24}(?:argument|parameter|limit)|(?:argument|parameter).{0,24}(?:invalid|validation)|too_big|maximum.*limit/i.test(s)) return 'NATIVE_ARGUMENTS_INVALID';
   if (/method.?not.?found|unsupported|incompatible|request-version-mismatch/i.test(s)) return 'CAPABILITY_UNAVAILABLE';
   if (/not.?loaded/i.test(s)) return 'THREAD_NOT_LOADED';
   if (/not.?found|does not exist|no (?:codex )?(?:thread|conversation|session|rollout) found|unable to find (?:thread|conversation)/i.test(s)) return 'THREAD_NOT_FOUND';
@@ -45,7 +48,7 @@ function remoteFault(value, stage, details={}) {
 }
 function envelope(e, defaults={}) {
   const keys=['code','stage','source','observedAt','requestId','tool','nativeCode','causeFingerprint',
-    'timedOut','disconnected','automaticRetrySafe','suggestedAction','requestState','deliveryState','threadId'];
+    'timedOut','disconnected','automaticRetrySafe','retryable','suggestedAction','requestState','deliveryState','threadId','nativeLimit','accessibleCount'];
   const result={ok:false,...defaults,...Object.fromEntries(keys.filter(k=>e[k]!==undefined).map(k=>[k,e[k]]))};
   result.errorCode=result.code ?? 'BRIDGE_ERROR';
   result.error=reasons[e.code]?.[0] ?? defaults.error ?? '橋接未能完成操作；具體原因不明。';

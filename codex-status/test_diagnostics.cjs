@@ -26,11 +26,12 @@ test('discovery distinguishes missing and multiple instances',()=>{
 });
 test('read failures retain safe classified context and never become idle',async t=>{
   for(const [native,expected] of [['thread notLoaded','THREAD_NOT_LOADED'],['thread not found','THREAD_NOT_FOUND'],
-    ['No Codex thread found for threadId: fixture. Hosts without a readable match: PRIVATE','THREAD_NOT_FOUND'],['bridge_busy','BRIDGE_BUSY']]){
+    ['No Codex thread found for threadId: fixture. Hosts without a readable match: PRIVATE','THREAD_NOT_FOUND'],['bridge_busy','BRIDGE_BUSY'],['invalid limit argument','NATIVE_ARGUMENTS_INVALID']]){
     const pipe=await fixture(t,r=>r.method==='tools/list'?catalog:{success:false,error:{code:native,message:'C:\\private\\token secret-value'}});
     await assert.rejects(query('status',ID,{pipe}),e=>{
       assert.equal(e.code,expected);assert.equal(e.stage,'request');assert.equal(e.tool,'read_thread');
       assert.equal(e.requestState,'rejected');assert.ok(e.requestId);assert.ok(e.observedAt);
+      assert.equal(e.retryable,expected==='BRIDGE_BUSY');
       assert.ok(!JSON.stringify(e).includes('secret-value'));return true;
     });
   }

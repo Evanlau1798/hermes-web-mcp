@@ -83,7 +83,7 @@ async function query(command, threadId = '', options = {}) {
   if(options.cursor!==undefined&&(command!=='read'||typeof options.cursor!=='string'||!options.cursor.length||options.cursor.length>8192))
     throw Error('Invalid query option: cursor');
   const tool = command === 'list' ? 'list_threads' : 'read_thread';
-  const args = command === 'list' ? {limit:limit+offset} : {
+  const args = command === 'list' ? {} : {
     threadId, hostId:'local', turnLimit,
     ...(options.cursor!==undefined?{cursor:options.cursor}:{}),
     includeOutputs:false, maxOutputCharsPerItem:maxChars
@@ -92,14 +92,20 @@ async function query(command, threadId = '', options = {}) {
   try {
     client = connect(options.pipe ?? selectPipe(), options.timeoutMs ?? 15000);
     const catalog = await client.request('tools/list', {threadStartKind:'all'});
+    if(command==='list'){
+      const max=catalog?.tools?.find(t=>t.name==='list_threads'&&t.namespace==='codex_app')?.inputSchema?.properties?.limit?.maximum;
+      args.limit=Math.min(limit+offset,Number.isInteger(max)&&max>0?max:50);
+    }
     const data=parseAppJson(await appCall(client,catalog,tool,args,undefined,options.callerThreadId),tool);
     const base = {source:'codex-desktop-live', observedAt:new Date().toISOString(), hostId:'local'};
     if (command === 'list') {
       if (!Array.isArray(data.threads) || !Array.isArray(data.pinnedThreads)) throw fault('PROTOCOL_INVALID','parse',{tool,requestState:'received',deliveryState:'failed'});
       const rows=[...data.pinnedThreads,...data.threads].filter(t => t.kind === 'codex' || !t.kind);
       const end=offset+limit;
-      // Native list has only a limit; offsets re-fetch a changing pinned-first snapshot.
-      const exhausted=data.threads.length<limit+offset;
+      // Native list has no cursor: only this bounded pinned-first snapshot is accessible.
+      const exhausted=data.threads.length<args.limit;
+      if(offset>=rows.length&&!exhausted)throw fault('NATIVE_PAGINATION_LIMIT','pagination',{tool,retryable:false,
+        nativeLimit:args.limit,accessibleCount:rows.length});
       return {...base, threads:rows.slice(offset,end).map(t=>{
         const row=pick(t,['id','title','status','hostId','cwd','updatedAt']);
         if(options.compact!==false&&typeof row.title==='string'&&row.title.length>120){
@@ -107,8 +113,9 @@ async function query(command, threadId = '', options = {}) {
           row.full_title_required='codex_status/codex_read';
         }
         return row;
-      }),pagination:{mode:'local-offset',limit,offset,returned:rows.slice(offset,end).length,
-        nextOffset:rows.length>end||!exhausted?end:null,
+      }),pagination:{mode:'bounded-snapshot',limit,offset,returned:rows.slice(offset,end).length,
+        nativeLimit:args.limit,accessibleCount:rows.length,snapshotTruncated:!exhausted,
+        nextOffset:rows.length>end?end:null,
         hasMore:rows.length>end?true:exhausted?false:null,nativeCursorSupported:false},
         unavailableHosts:data.unavailableHosts ?? [], unavailableSources:data.unavailableSources ?? []};
     }
@@ -121,7 +128,9 @@ async function query(command, threadId = '', options = {}) {
       ...(command === 'read' ? {turns, page:data.page} : {})};
   } catch(e){
     e.tool ??= tool;e.source ??= 'codex-desktop-live';e.observedAt ??= new Date().toISOString();e.requestId ??= `hermes-query-${randomUUID()}`;
-    e.automaticRetrySafe=true;throw e;
+    e.automaticRetrySafe=true;
+    e.retryable??=['DESKTOP_TIMEOUT','CONNECTION_FAILED','CONNECTION_CLOSED','BRIDGE_BUSY'].includes(e.code);
+    throw e;
   } finally {client?.close();}
 }
 

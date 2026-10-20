@@ -4,6 +4,8 @@
 
 App Tools 查詢及 send，與 IPC owner 路由的 stop 保留原本的參數驗證、名稱核對、逾時、部分成功及結果不明語意。sub-agent 使用相同 read/status。每次重新探索唯一管道，Desktop 需開啟並登入。
 
+list 的公開 limit 上限仍為 100；送入 Desktop 的 limit 依其 tools/list schema 上限裁切，缺少宣告時使用 50。pagination.mode=bounded-snapshot、nativeLimit、accessibleCount、snapshotTruncated 說明實際可讀快照。Desktop 無 cursor：nextOffset 只指向這個快照可及的範圍；hasMore=null 表示更深資料未知，超出可及快照回 NATIVE_PAGINATION_LIMIT，不誤報沒有對話。automaticRetrySafe 只表示唯讀重試無寫入副作用；retryable 才表示可嘗試原參數的暫態重試。已知 ID 優先 status，參數／深頁限制需調整查詢，不無限重試。
+
 Web 入口從忽略的 `runtime/codex-context.json` 讀取 `callerThreadId`。部署者需選擇此 Desktop 確實存在的閒置測試對話；它只是路由背景，並非操作目標，也不會藉此啟動對話。入口只檢查 JSON 與 UUID 格式，缺檔或格式錯誤時回傳 `CODEX_CONTEXT_REQUIRED`、`not-sent`，不使用舊安裝的對話 ID。格式正確的 UUID 是否存在及可用，仍需 Desktop 的實際回覆確認；不宣稱本機格式驗證已檢查閒置狀態。
 
 直接使用 CLI 時，設定 `HERMES_CODEX_CALLER_THREAD_ID` 為你本機同樣的 UUID：
