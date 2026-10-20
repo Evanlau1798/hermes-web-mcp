@@ -5,7 +5,9 @@ import json
 TRACKING_STATUS_SCHEMA = {'type': 'object', 'required': ['tracking_id'], 'properties': {
     'tracking_id': {'type': 'string', 'pattern': '^[0-9a-f]{32}$'},
     'after_sequence': {'type': 'integer', 'minimum': 0},
-    'limit': {'type': 'integer', 'minimum': 1, 'maximum': 64}}}
+    'limit': {'type': 'integer', 'minimum': 1, 'maximum': 64},
+    'wait_seconds': {'type': 'number', 'minimum': 0, 'maximum': 25,
+                     'description': '最多等待 25 秒的新事件或已完成取樣心跳；逾時不停止 manual worker。'}}}
 TRACKING_SCHEMA = {'type': 'object', 'required': ['action'], 'properties': {
     **TRACKING_STATUS_SCHEMA['properties'],
     'action': {'enum': ['start', 'status', 'stop']}, 'kind': {'enum': ['codex', 'computer']},
@@ -32,20 +34,24 @@ TRACKING_SCHEMA = {'type': 'object', 'required': ['action'], 'properties': {
 ]}
 
 
-def track(bridge, arguments):
+def track(bridge, arguments, release_lock=None):
     from backend import safe_result
     args = dict(arguments)
     action = args.pop('action')
-    allowed = {'status': {'tracking_id', 'after_sequence', 'limit'}, 'stop': {'tracking_id'},
+    allowed = {'status': {'tracking_id', 'after_sequence', 'limit', 'wait_seconds'}, 'stop': {'tracking_id'},
                'start': {'kind', 'thread_id', 'pid', 'window_id', 'mode', 'interval',
                          'deadline_seconds', 'expected_turn_id', 'completion_predicate'}}
     if set(args) - allowed[action]:
         raise ValueError('追蹤參數不可混用其他 action 的欄位。')
     try:
         if action == 'status':
+            if release_lock:
+                release_lock()
             return bridge.tracking.status(args['tracking_id'], after_sequence=args.get('after_sequence', 0),
-                                          limit=args.get('limit', 64))
+                                          limit=args.get('limit', 64), wait_seconds=args.get('wait_seconds', 0))
         if action == 'stop':
+            if release_lock:
+                release_lock()
             return bridge.tracking.stop(args['tracking_id'], timeout=1)
         kind = args.pop('kind')
         if kind == 'codex':
@@ -70,7 +76,14 @@ def track(bridge, arguments):
                 if not stable:
                     raise ValueError('指定視窗未提供可用的 AX 文字或元素。')
                 return safe_result(stable)
-        return bridge.tracking.start(kind, target, sampler, **args)
+        started = bridge.tracking.start(kind, target, sampler, **args)
+        if release_lock:
+            release_lock()
+        baseline = bridge.tracking.status(started['tracking_id'], wait_seconds=25)
+        baseline['baseline_ready'] = baseline['current_state'] is not None
+        baseline['follow_up'] = {'tool': 'hermes_tracking_status', 'after_sequence': baseline['latest_sequence'],
+            'wait_seconds': 25, 'background_worker_only': True, 'push_supported': False}
+        return baseline
     except KeyError:
         return {'success': False, 'errorCode': 'TRACKING_NOT_FOUND',
                 'error': '找不到此追蹤；請確認 tracking_id 與 MCP 是否重啟。'}

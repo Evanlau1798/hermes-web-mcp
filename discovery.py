@@ -181,9 +181,9 @@ def context(specs, cwd=None, task=''):
                               'learning': SKILL_LEARNING},
             'tracking': {'control': 'hermes_tracking', 'read': 'hermes_tracking_status',
                          'lifetime': '同一 MCP 程序，可跨 Web 對話查詢；重啟不恢復，不建立排程或主動發訊。',
-                         'workflow': 'start → tracking_id → status(after_sequence) → stop；mode=manual 或 task_complete，可設期限。'},
+                         'workflow': 'start 取得 baseline_ready → 同回合 status(after_sequence,wait_seconds=25) 接續等候 → stop；預設觀察預算 120 秒，使用者指定則依其要求。timeout 不停止 manual worker；背景取樣不等於 Web Agent 仍在監看或語音推播。'},
             'codex_delivery': {'receipt': 'codex_delivery_status', 'operation_id_required': True,
-                               'compact': '使用者要求傳訊 → prepare_send 自動判斷：最新完成 turn 非 Compact、目前上下文 >80000 tokens、完成距今 >30 分鐘三者皆成立才先壓縮；不額外提醒或詢問。其餘直接傳送。唯讀 operation_status 等待；原生 Compact 確認完成後才傳原訊息。'},
+                               'compact': '使用者要求傳訊 → prepare_send：最新完成 turn 非 Compact、上下文 >80000 tokens、完成距今 >30 分鐘皆成立才先壓縮，不另詢問。operation_status.summary 區分 not_required／complete 與 delivery=accepted；observe_turn=true 額外唯讀查新 turn，並非任務完成證明。原生 Compact 確認完成後才傳原訊息。'},
             'browser_use': {'tool': 'browser_use', 'workflow': 'guide → run(code)：完整讀目前版本指南，以官方 JavaScript 操作 Ego Lite。同一任務只用一個 TaskSpace，後續沿用 ID 與分頁標籤。截圖用 page.screenshot({path: browserScreenshotPath})；長操作用 hermes_process_read 查詢，完成後 finish。'},
             'computer_use': {'exposed': True, 'tool': 'hermes_computer_use',
                              'workflow': 'list_windows → capture(mode=som) → element 操作；capture_after=true 取得結果畫面。'}}

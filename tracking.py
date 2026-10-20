@@ -84,11 +84,11 @@ class TrackingManager:
             'call_lock': threading.Lock(),
             'terminal_reason': None, 'started_at': now, 'heartbeat_at': now,
             'last_success_monotonic': None, 'current_state': None,
-            'sample_count': 0, 'error_count': 0,
+            'sample_count': 0, 'error_count': 0, 'completed_samples': 0,
             'consecutive_errors': 0, 'degraded': False, 'last_error': None,
             'fingerprint': None, 'candidate_turn_id': None,
             'events': deque(), 'event_sequence': 0, 'events_dropped': 0,
-            'thread': None,
+            'thread': None, 'condition': threading.Condition(self._lock),
         }
         with self._lock:
             if self._closed:
@@ -111,13 +111,38 @@ class TrackingManager:
                 raise
             return self._status_locked(entry, 0, self.MAX_EVENTS)
 
-    def status(self, tracking_id, *, after_sequence=0, limit=64):
+    def status(self, tracking_id, *, after_sequence=0, limit=64, wait_seconds=0):
         if isinstance(after_sequence, bool) or not isinstance(after_sequence, int) or after_sequence < 0:
             raise ValueError('after_sequence must be a nonnegative integer')
         if isinstance(limit, bool) or not isinstance(limit, int) or not 1 <= limit <= self.MAX_EVENTS:
             raise ValueError('limit must be between 1 and MAX_EVENTS')
+        wait_seconds = self._bounded_number(wait_seconds, 0.0, 25.0, 'wait_seconds')
+        started = time.monotonic()
         with self._lock:
-            return self._status_locked(self._get_locked(tracking_id), after_sequence, limit)
+            entry = self._get_locked(tracking_id)
+            completed = entry['completed_samples']
+            reason = 'terminal' if entry['state'] == 'terminal' else 'immediate'
+            if wait_seconds and reason != 'terminal' \
+                    and entry['event_sequence'] <= after_sequence:
+                while True:
+                    remaining = wait_seconds - (time.monotonic() - started)
+                    if remaining <= 0:
+                        reason = 'timeout'
+                        break
+                    entry['condition'].wait(remaining)
+                    if entry['state'] == 'terminal':
+                        reason = 'terminal'
+                    elif entry['event_sequence'] > after_sequence:
+                        reason = 'events'
+                    elif entry['completed_samples'] != completed:
+                        reason = 'heartbeat'
+                    else:
+                        continue
+                    break
+            result = self._status_locked(entry, after_sequence, limit)
+            result['wait'] = {'reason': reason, 'requested_seconds': wait_seconds,
+                              'elapsed_seconds': time.monotonic() - started}
+            return result
 
     def stop(self, tracking_id, *, timeout=5.0):
         timeout = self._bounded_number(timeout, 0.0, self.MAX_JOIN_TIMEOUT, 'timeout')
@@ -208,10 +233,12 @@ class TrackingManager:
                     self._sample_error(entry, stage, self._safe_code(code, 'sampler_failed'))
                     view, fingerprint, matched = None, None, False
                 if view is not None:
-                    terminal = self._sample_success(entry, view, fingerprint, matched)
-                    if terminal:
-                        self._finish(entry, terminal)
-                        return
+                    # Publish sample completion and terminal state atomically to waiting queries.
+                    with self._lock:
+                        terminal = self._sample_success(entry, view, fingerprint, matched)
+                        if terminal:
+                            self._finish_locked(entry, terminal)
+                            return
                 snapshot = None
                 remaining = entry['interval']
                 if entry['deadline_at'] is not None:
@@ -282,6 +309,8 @@ class TrackingManager:
                 event_type = 'baseline' if entry['fingerprint'] is None else 'changed'
                 entry['fingerprint'] = fingerprint
                 self._event_locked(entry, event_type, self._summary(entry['kind'], view, event_type))
+            entry['completed_samples'] += 1
+            entry['condition'].notify_all()
             if entry['mode'] != 'task_complete':
                 return None
             if entry['kind'] == 'computer' and matched:
@@ -317,6 +346,8 @@ class TrackingManager:
             entry['degraded'] = True
             entry['last_error'] = error
             entry['current_state'] = None
+            entry['completed_samples'] += 1
+            entry['condition'].notify_all()
 
     def _finish(self, entry, reason):
         with self._lock:
@@ -332,6 +363,7 @@ class TrackingManager:
         entry['finished_at'] = self._clock()
         entry['stop_event'].set()
         self._event_locked(entry, 'terminal', 'Tracking ended (' + reason + ')')
+        entry['condition'].notify_all()
 
     def _request_stop_locked(self, entry, reason):
         if entry['state'] != 'terminal':
@@ -455,6 +487,6 @@ class TrackingManager:
     @staticmethod
     def _bounded_number(value, minimum, maximum, name):
         if isinstance(value, bool) or not isinstance(value, (int, float)) \
-                or not math.isfinite(value) or not minimum <= value <= maximum:
+                or not minimum <= value <= maximum or not math.isfinite(value):
             raise ValueError(f'{name} must be between {minimum} and {maximum}')
         return float(value)

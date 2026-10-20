@@ -16,6 +16,8 @@ ChatGPT Web 先呼叫 hermes_context，再使用此入口。本機原生 Codex �
 每次 run 先完整讀取工具回執，若是內容參照先取得原文。status=exited 時直接使用該回執的圖片；僅 running/timeout 才查詢程序。圖片隨首次完成回執回傳，後續重複 poll 不再回傳同張圖片；log 用於完整文字輸出，poll 用於完成狀態與圖片。
 宿主若以 content_items 包裝 MCP 內容，依實際結構取出 type=image 的區塊，在同一次宿主執行中以圖片 helper 顯示其 data URL（data:<mimeType>;base64,<data>）；不要對非陣列 content 呼叫 map，也不要只回報圖片路徑。顯示後再核對畫面。
 guide 結果若有截短先查完整輸出，不將缺少指南結尾視為讀完。結果不明先查程序與頁面，不重送原腳本。
+先決定本步要確認的資料，再用官方 evaluate 回傳有界 JSON，例如 URL、標題、主區段與必要連結；需要元素參照才取 snapshot。遇到 popup，依官方事件／回執取得新頁標籤，再操作該頁；原頁 handle 不會自動變成新頁。SPA 操作後等待預期元素或狀態，並核對 URL 與渲染內容。
+執行回執的 observation 說明截短範圍；文字不全時沿 log 參數回讀。log 的 offset/limit 選行，char_offset/max_chars 再切長行；沿 next_char_offset 接續，content_id 改變時重新確認選定內容。日誌是保留中的滾動緩衝。timings_ms 量測本機準備、啟動與等待，不代表網站或 Tunnel 的網路延遲。
 使用者接管時按官方指南 handOff，完成後再續接同一個 Space；任務成功最後呼叫 finish({keep:[]})，只保留使用者需要的結果頁。
 
 ## 技能更新
@@ -31,7 +33,8 @@ Codex 用 kind=codex、thread_id；Computer Use 用 kind=computer、由 list_win
 mode=manual 追蹤至使用者停止；mode=task_complete 依指定／觀測到的 turn 完成，或明確的電腦文字條件自動停止。可設 deadline_seconds。
 電腦條件例如 completion_predicate={"path":["elements",0,"label"],"contains":"完成"}，先擷取並核對欄位，不能臆測完成條件。
 
-以 hermes_tracking_status(tracking_id,after_sequence) 查詢存活、心跳、current_state、degraded、錯誤與增量事件。
+start 最多等待 25 秒取得 baseline；以 baseline_ready 判斷有無首份有效狀態。以 hermes_tracking_status(tracking_id,after_sequence,wait_seconds=25) 查詢存活、心跳、current_state、degraded、錯誤與增量事件。
+要求持續觀察時，在目前 Web 回合沿同一 tracking_id 和 sequence 接續等待；先採 120 秒觀察預算，使用者指定期間則依其要求。每次檢查 events、wait.reason、alive 與 terminal，重要變化才回報，單純心跳不重複敘述。timeout 只結束本次等待；manual worker 仍存活。達到回合預算時交代最後觀測時間、背景狀態與 tracking_id，不能把背景取樣說成仍有 Web Agent 監看或會自動語音通知。使用 UTC 時間戳計算先後，面向使用者以 Asia/Taipei 顯示，不以 UI 相對時間推算精確時刻。
 同樣畫面不重複產生變化事件，missed_events 提示已淘汰的事件。畫面變化後按任務另行擷取，事件不保存私訊文字或圖片。
 結束用 hermes_tracking(action=stop,tracking_id=...)；仍有取樣未返回時依 stopping/alive 查到 terminal，不能提前宣稱已完全停止。
 
@@ -48,5 +51,5 @@ accepted 表示受理，以 codex_status/read 對照 turnBaseline 查證後續�
 使用者要求傳訊後，閒置對話用 codex_prepare_send(thread_id,expected_title,message,operation_id) 啟動自動流程，不額外提醒或詢問是否 Compact。
 最新完成 turn 非 Compact、目前上下文 >80000 tokens 且完成時間距今 >30 分鐘，三者都成立才先壓縮；否則直接傳。用量來自原生 last_token_usage，未知不猜測。閒置對話的發訊或續跑意圖都優先走 prepare_send，不另呼叫 send／resume。
 啟動後以唯讀 codex_operation_status(operation_id) 等背景工作。需要壓縮時，只有新的原生 contextCompaction turn 成功完成，才由背景傳送原訊息；不要另呼叫 codex_send。
-accepted 不是 Compact 完成；查詢 compact_complete、state、worker_alive、delivery_state，以 delivery_operation_id 查 codex_delivery_status。逾時、狀態不明、其他 turn 介入或 MCP 重啟均不自動重送；重新檢查並由人類重新要求傳訊。
+先讀 summary：compact=not_required 表示本次流程跳過壓縮，compact_complete=false 此時不代表仍在等待；delivery=accepted 表示受理。需要後續 turn 狀態時用 codex_operation_status(observe_turn=true)，turn_observation 只證明 baseline 之後有新 turn，不證明由本訊息觸發，也不代表使用者任務已完成。需要獨立送達回執時，再用 delivery_operation_id 查 codex_delivery_status。逾時、狀態不明、其他 turn 介入或 MCP 重啟均不自動重送；重新檢查並由人類重新要求傳訊。
 查詢失敗依 stage/errorCode/requestId/suggestedAction 排錯，不以舊資料庫快照或 generic exception 推論 idle。

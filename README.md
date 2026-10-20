@@ -113,6 +113,14 @@ mode=manual 持續到 `action=stop`；mode=task_complete 在觀測到指定／�
 
 Worker 由長期運作的 MCP 程序持有，同一私人入口的新 Web 對話可帶 tracking_id 接續查詢。MCP 重啟會結束追蹤，須重新開始；此功能不建立排程、不主動向 Web 或 Discord 發訊，也不保證結束的 Web agent 自行醒來。Discord 背景快捷鍵支援由外部應用決定。
 
+## 回執與觀察
+
+程序日誌可用 log 的 char_offset／max_chars（最多 16000）分頁長行；依 log_page.next_char_offset 接續，以 content_id 核對內容。offset／limit 仍先選行，緩衝可能滾動，並非持久完整日誌。browser use 的 observation 和 log 提供截短資訊與回讀參數；timings_ms 僅量測本機準備、啟動及等待。外層輸出超限仍保留 error、exit_code 等結構化欄位。
+
+追蹤 start 最多等待 25 秒取得 baseline，依 baseline_ready 判讀；status 加 wait_seconds=25 等事件、完成取樣心跳或結束，wait.reason=timeout 不停止 manual worker。持續觀察時於目前回合接續查詢，預設 120 秒觀察預算；結束回合須交代最後觀測與背景狀態。工作流程見 skills/software-development/hermes-web-mcp-workflows/SKILL.md。
+
+Codex 背景操作先讀 summary：compact=not_required 表示跳過，delivery=accepted 只代表受理。status 加 observe_turn=true 可唯讀觀測 baseline 之後的新 turn；相關性僅為 newer_than_baseline_only，task_completion 仍需按任務結果核實。
+
 ## 共用記憶
 
 `hermes_memory_read(target)` 讀取 memory 或 user 條目與容量。`hermes_memory_edit` 使用原生 add、patch、remove 或 operations 批次語意。先讀取，再精確更新長期偏好或事實。

@@ -7,6 +7,7 @@ import uuid
 from contextlib import contextmanager
 from pathlib import Path
 from compact_state import valid_timestamp, should_compact
+from operation_summary import summarize, observe_turn as observe_latest_turn
 
 
 class CompactJobs:
@@ -106,7 +107,7 @@ class CompactJobs:
                 'errorCode': row['error_code'], 'created_at': row['created_at'],
                 'updated_at': row['updated_at'], 'confirmed_at': row['confirmed_at'],
                 'compact_started_at': row['compact_started_at'],
-                'compact_completed_at': row['compact_completed_at'],
+                'summary': summarize(row), 'compact_completed_at': row['compact_completed_at'],
                 'delivery_started_at': row['delivery_started_at'],
                 'delivery_completed_at': row['delivery_completed_at']}
 
@@ -465,10 +466,16 @@ class CompactJobs:
             else:
                 self._fail_compaction(operation_id, 'compaction_unknown', 'WORKER_FAILED')
 
-    def status(self, operation_id):
+    def status(self, operation_id, observe_turn=False):
+        if not isinstance(observe_turn, bool):
+            raise ValueError('observe_turn must be boolean')
         with self.lock:
             row = self._row(operation_id)
-            return self._view(row) if row else self._error('OPERATION_NOT_FOUND')
+            result = self._view(row) if row else self._error('OPERATION_NOT_FOUND')
+        if observe_turn and row:
+            result['turn_observation'] = observe_latest_turn(self.api, row)
+            result['summary']['turn'] = result['turn_observation']['state']
+        return result
 
     def close(self, timeout=1.0):
         until = time.monotonic() + max(0.0, timeout)

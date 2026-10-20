@@ -5,6 +5,7 @@ import os
 import shutil
 import tempfile
 import uuid
+import time
 from pathlib import Path
 
 from computer_result import ComputerResult
@@ -45,12 +46,15 @@ class BrowserAdapter:
         from runtime import ROOT
         self.root = root or ROOT / 'tmp/browser-use'
         self.runs = {}
+        self.sessions = {}
 
     def call(self, args, native, owner, approve):
         from backend import safe_result
         folder = None
         session = None
         started = False
+        beginning = time.perf_counter()
+        timings = {}
         try:
             executable = ego_executable()
             if args['action'] == 'run':
@@ -71,19 +75,32 @@ class BrowserAdapter:
             command = "& '" + str(executable).replace("'", "''") + "'" + suffix
             prepared, _ = prepare_terminal({'command': command, 'timeout': 30,
                 **({'background': True} if folder else {})}, session_key=owner)
+            launching = time.perf_counter()
+            timings['prepare_ms'] = round((launching - beginning) * 1000, 3)
             started = True
             result = _data(native('terminal', prepared, approval_callback=approve,
                 task_id=owner, session_id=owner, tool_call_id=uuid.uuid4().hex, enabled_tools=['terminal']))
             session = result.get('session_id')
+            timings['launch_ms'] = round((time.perf_counter() - launching) * 1000, 3)
             if folder and session:
                 self.runs[session] = folder
+                for old in list(self.sessions):
+                    if len(self.sessions) < 128:
+                        break
+                    if old not in self.runs:
+                        del self.sessions[old]
+                self.sessions[session] = timings
+                waiting = time.perf_counter()
                 result = _data(native('process_manage', {'action': 'wait', 'session_id': session, 'timeout': 25},
                     approval_callback=approve, task_id=owner, session_id=owner))
+                timings['wait_ms'] = round((time.perf_counter() - waiting) * 1000, 3)
+                timings['local_total_ms'] = round((time.perf_counter() - beginning) * 1000, 3)
                 result['session_id'] = session
                 return self.collect(session, result)
             if folder and result.get('error'):
                 shutil.rmtree(folder)
             return ComputerResult(safe_result({**result, 'automaticRetrySafe': False,
+                'timings_ms': timings,
                 'browser_guidance': '先讀 guide；同一任務沿用 TaskSpace ID。截圖用 page.screenshot({path: browserScreenshotPath})。長工作以 hermes_process_read 查詢。'}), [])
         except Exception as exc:
             if folder and not started:
@@ -96,11 +113,11 @@ class BrowserAdapter:
     def collect(self, session, result):
         from backend import safe_result
         folder = self.runs.get(session)
-        if folder is None:
+        if folder is None and session not in self.sessions:
             return None
         result = {**result, 'session_id': session, 'automaticRetrySafe': False}
         images = []
-        if result.get('status') in ('exited', 'completed', 'already_exited') \
+        if folder is not None and result.get('status') in ('exited', 'completed', 'already_exited') \
                 and result.get('completion_reason', 'exited') == 'exited':
             image = folder / 'screenshot.png'
             try:
@@ -119,6 +136,8 @@ class BrowserAdapter:
                 if cleanup_error:
                     result['cleanup_error'] = cleanup_error
         result['image_count'] = len(images)
+        from browser_output import format_result
+        result = format_result(result, session, self.sessions.get(session, {}))
         payload = safe_result(result)
         payload.update(session_id=session, automaticRetrySafe=False, image_count=len(images))
         return ComputerResult(payload, images)
