@@ -27,6 +27,14 @@ Hermes MCP 預設供 ChatGPT Web 使用。Web 對話涉及 Hermes、Codex 或 Wi
 
 技能內容變更使用 `hermes_skill_manage`，以 `operations` 呼叫原生 create、patch、write_file、remove_file、delete；不要用一般檔案 patch 代替。先讀原文，再提供精確的 old_string/new_string。回執保留原生驗證、lint、批次回滾與核准 staging；`approval_required` 代表尚待原生批准，並非寫入完成。Codex／專案技能仍由原有維護入口處理。
 
+### 主動學習
+
+`hermes_context.skill_updates.learning` 提供依 Hermes harness 整理的學習指引。Web Agent 在收到人類對風格／流程的修正、找到已驗證可重用的解法，或發現已載入技能錯誤／過時時主動判斷更新，並在完成任務前再檢查一次。依序優先更新本次載入的 Hermes 技能、既有類別技能、主題支援檔；都不適用才建立類別技能。沒有新規則或已有等價內容就不製造寫入。
+
+更新前重新完整讀取確切目標，搜尋去重，再以 `hermes_skill_manage` 精確 patch，成功後讀回核對。常用偏好放 SKILL.md，主題細節放 references 並補上入口；只提煉規則與原因，不保存整段對話、秘密、臨時故障或未驗證嘗試。自動學習不刪除技能，也不自動上傳本機技能。原生驗證、lint、回滾與核准機制照常生效；等待批准或結果不明時如實回報，不繞過防護或盲目重送。
+
+這是由 ChatGPT Web 執行的任務指引，不另啟 Hermes／背景模型；是否產生更新取決於當次學習訊號。其他既有對話的凍結提示不會即時刷新。
+
 ## 檔案與 PowerShell
 
 - `hermes_read_file`：讀取檔案；既有檔案準備整份覆寫時，先完整讀取。
