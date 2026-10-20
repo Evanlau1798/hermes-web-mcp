@@ -30,13 +30,19 @@ async def main():
                 assert process_read.annotations.destructive_hint is False
                 assert process_read.annotations.open_world_hint is False
                 assert not next(t for t in tools if t.name == 'hermes_process_manage').annotations.read_only_hint
+                bootstrap_id = None
                 async def call(name, args):
+                    nonlocal bootstrap_id
+                    if name != 'hermes_context':
+                        args = {**args, 'bootstrap_id':bootstrap_id}
                     reply = await client.call_tool(name, args, read_timeout_seconds=60)
                     assert not reply.is_error, str(reply)
                     data = json.loads(reply.content[0].text)
+                    if name == 'hermes_context':
+                        bootstrap_id = data['bootstrap']['bootstrap_id']
                     assert reply.structured_content == data, 'Web clients need structured results as well as text'
                     return data
-                overview = await call('hermes_context', {})
+                overview = await call('hermes_context', {'task':'isolated stdio smoke'})
                 assert len(overview['tools']) == 27 and overview['computer_use']['exposed']
                 assert overview['processes']['read'] == 'hermes_process_read'
                 skills = await call('hermes_skills_list', {'limit': 1})
@@ -60,9 +66,9 @@ async def main():
                 assert polled['status'] == 'running', polled
                 logged = await call('hermes_process_read', {'action': 'log', 'session_id': session_id, 'limit': 10})
                 assert 'output' in logged, logged
-                denied = await client.call_tool('hermes_process_read', {'action': 'kill', 'session_id': session_id})
+                denied = await client.call_tool('hermes_process_read', {'action': 'kill', 'session_id': session_id, 'bootstrap_id':bootstrap_id})
                 assert denied.is_error, denied
-                foreign = await client.call_tool('hermes_process_read', {'action': 'poll', 'session_id': 'foreign'})
+                foreign = await client.call_tool('hermes_process_read', {'action': 'poll', 'session_id': 'foreign', 'bootstrap_id':bootstrap_id})
                 assert foreign.is_error, foreign
                 legacy = await call('hermes_process_manage', {'action': 'poll', 'session_id': session_id})
                 assert legacy['status'] == 'running', legacy

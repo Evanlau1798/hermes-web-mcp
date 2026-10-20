@@ -149,6 +149,7 @@ def skill_read(skill_id, file_path='SKILL.md', cwd=None, offset=0, limit=None):
 
 
 def context(specs, cwd=None, task=''):
+    from bootstrap_state import HARNESS
     project = project_root(cwd)
     instructions = []
     if project:
@@ -160,7 +161,7 @@ def context(specs, cwd=None, task=''):
                 instructions.append({'path': str(path), 'read_with': 'hermes_read_file', 'scope': str(directory)})
     rows = catalog(cwd)
     candidates = rank(rows, task)[:4] if task else []
-    return {'success': True, 'name': 'Hermes Local Tools',
+    return {'success': True, 'name': 'Hermes Local Tools', 'harness': HARNESS,
             'architecture': 'ChatGPT Web（含 Web 語音對話）→ 私人 Tunnel → stdio MCP → Hermes 原生工具／Codex bridge',
             'routing': 'Hermes MCP 預設供 ChatGPT Web 使用；Web 端先呼叫 hermes_context，再選擇工具。本機原生 Codex 使用自己的工具，僅依人類使用者明確要求調用 Hermes 整合。',
             'tools': {name: {'read_only': spec['annotations']['read_only_hint']} for name, spec in specs.items()},

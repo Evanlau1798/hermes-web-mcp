@@ -7,6 +7,13 @@ description: Hermes Web MCP：browser use、技能更新、Codex 傳訊與持續
 
 ChatGPT Web 先呼叫 hermes_context，再使用此入口。本機原生 Codex 僅依人類明確要求使用 Hermes 整合。
 
+## Harness Bootstrap
+
+每個新任務先呼叫 hermes_context(cwd,task)，task 描述具體意圖；讀 harness.steps、prerequisites.pending 與候選技能。後續每個工具帶回 bootstrap.bootstrap_id。改任務／cwd 時，以舊 ID 重新呼叫 context，立即改用新 ID；技能與規範閱讀狀態重新開始，背景程序則沿原 session_id 查詢。
+status=ready 表示已初始化，execution_ready 才表示前置條件完成。先用 hermes_skill_read 連續讀 required SKILL.md 到 eof，再按正文讀必要 references；AGENTS.md 用 read_file 從 offset=1 依分頁連續讀到結尾。每次閱讀的 prerequisites 回報尚待項目，清空後執行寫入。skill_match_status=no_match 時，以 pending 指定 query 呼叫 hermes_skills_list（offset=0）；找到技能就先讀完，仍無匹配才記為 searched_no_match，不將空候選視為沒有規範。
+依「定位 → 讀取 → 操作 → 完整回執 → 驗證」執行，不用口頭描述代替工具操作。檔案用 read/search/patch/write；命令用 PowerShell terminal，長命令沿 session_id 查 poll/log；網站先讀 browser guide，桌面先擷取再操作；Codex 依精確目標與 operation_id；結尾按 learning 指引更新已驗證的可重用技能。
+新 Web 對話自行初始化，不複製其他對話的 bootstrap ID。metadata 存在時 ID 綁定 session；缺少時 ID 是任務關聯憑證，不共用 transport 狀態。server 不自動讀取人類訊息判斷換任務；Agent 在新意圖／改目錄時主動重新初始化。Bootstrap 不讀入人設、記憶或啟動 Hermes 模型。
+
 ## 瀏覽器 browser use
 
 網站任務使用 browser_use。先 action=guide 完整讀取本機目前版本的 Ego 官方指南，再以 action=run、code 執行官方 JavaScript。

@@ -26,8 +26,9 @@ asyncio.run(server.main())'''
             async with stdio_client(parameters) as streams:
                 async with ClientSession(*streams) as client:
                     await client.initialize()
-                    await client.call_tool('hermes_context', {})
-                    result = await client.call_tool('codex_status', {'thread_id': '11111111-1111-4111-8111-111111111111'})
+                    boot = await client.call_tool('hermes_context', {'task':'query diagnostic fixture'})
+                    result = await client.call_tool('codex_status', {'thread_id': '11111111-1111-4111-8111-111111111111',
+                        'bootstrap_id':boot.structured_content['bootstrap']['bootstrap_id']})
                     self.assertTrue(result.is_error)
                     self.assertEqual(result.structured_content['stage'], 'read')
                     self.assertEqual(result.structured_content['errorCode'], 'THREAD_NOT_LOADED')
@@ -56,20 +57,22 @@ asyncio.run(server.main())'''
                     blocked = await client.call_tool('hermes_read_file', args, meta=a)
                     self.assertTrue(blocked.is_error)
                     self.assertEqual(blocked.structured_content['errorCode'], 'bootstrap_required')
-                    bootstrap = await client.call_tool('hermes_context', {'cwd': str(runtime.ROOT)}, meta=a)
+                    bootstrap = await client.call_tool('hermes_context', {'cwd': str(runtime.ROOT), 'task':'transport acceptance'}, meta=a)
                     self.assertFalse(bootstrap.is_error)
                     self.assertEqual(bootstrap.structured_content['bootstrap']['terminal_default'], 'powershell')
-                    process_list = await client.call_tool('hermes_process_read', {'action': 'list'}, meta=a)
+                    bid = bootstrap.structured_content['bootstrap']['bootstrap_id']
+                    args['bootstrap_id'] = bid
+                    process_list = await client.call_tool('hermes_process_read', {'action': 'list', 'bootstrap_id':bid}, meta=a)
                     self.assertFalse(process_list.is_error)
                     self.assertEqual(process_list.structured_content['processes'], [])
-                    denied_control = await client.call_tool('hermes_process_read', {'action': 'kill', 'session_id': 'unused'}, meta=a)
+                    denied_control = await client.call_tool('hermes_process_read', {'action': 'kill', 'session_id': 'unused', 'bootstrap_id':bid}, meta=a)
                     self.assertTrue(denied_control.is_error)
                     other = await client.call_tool('hermes_read_file', args, meta=b)
                     self.assertTrue(other.is_error)
                     read = await client.call_tool('hermes_read_file', args, meta=a)
                     self.assertFalse(read.is_error)
                     self.assertEqual(json.loads(read.content[0].text), read.structured_content)
-                    terminal = await client.call_tool('hermes_terminal', {'command': "Write-Output '繁體成功'; Write-Error 'expected-error'", 'timeout': 10}, meta=a)
+                    terminal = await client.call_tool('hermes_terminal', {'command': "Write-Output '繁體成功'; Write-Error 'expected-error'", 'timeout': 10, 'bootstrap_id':bid}, meta=a)
                     self.assertFalse(terminal.is_error)
                     self.assertEqual(terminal.structured_content['exit_code'], 1)
                     self.assertEqual(terminal.structured_content['shell'], 'powershell')
@@ -81,7 +84,8 @@ asyncio.run(server.main())'''
                     self.assertFalse(terminal.structured_content['automaticRetrySafe'])
                     legacy = await client.call_tool('hermes_read_file', args)
                     self.assertTrue(legacy.is_error)
-                    await client.call_tool('hermes_context', {})
+                    local = await client.call_tool('hermes_context', {'task':'metadata-free isolated task'})
+                    args['bootstrap_id'] = local.structured_content['bootstrap']['bootstrap_id']
                     legacy = await client.call_tool('hermes_read_file', args)
                     self.assertFalse(legacy.is_error)
         asyncio.run(run())

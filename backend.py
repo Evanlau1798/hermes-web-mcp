@@ -26,6 +26,8 @@ NATIVE = {
     'process_manage': (PROCESS_SCHEMA, '輸入或停止此 MCP 建立的背景程序；查詢優先用 hermes_process_read。相容既有查詢；wait 每次最多 30 秒，仍執行時接續查詢。', False),
 }
 INSTRUCTIONS = (
+    'Hermes Harness：這是 ChatGPT Web 的工具執行框架。每個新任務先 hermes_context(cwd,task)，讀取 harness.steps 與 prerequisites.pending。'
+    '後續每個工具帶回 bootstrap.bootstrap_id；換任務／cwd 時帶舊 ID 重新初始化，之後改用新 ID。依序完成必要技能與 AGENTS.md 閱讀，再操作、驗證與整理可重用技能。'
     'Hermes MCP 預設供 ChatGPT Web 使用；ChatGPT Web 處理 Hermes、Codex 對話或 Windows 本機操作時，先呼叫 hermes_context。'
     '本機原生 Codex 預設使用自己的工具；僅在人類使用者明確要求使用 Hermes 整合時，才調用此 MCP。'
     '直接使用 Hermes 工具，不呼叫 Hermes 模型、不透過 Discord、不載入人設。'
@@ -233,9 +235,12 @@ class Bridge:
                             'annotations': {'read_only_hint': readonly, 'destructive_hint': not readonly,
                                             'open_world_hint': True}}
 
-    def call(self, name, arguments, approve=None, client_scope=None):
+    def call(self, name, arguments, approve=None, client_scope=None, require_bootstrap=False):
         if name not in self.specs:
             raise ValueError('未知工具')
+        from bootstrap_state import resolve_scope, new_client, prerequisites, record_instruction, record_search, same_cwd
+        arguments = dict(arguments)
+        token = arguments.pop('bootstrap_id', None) if require_bootstrap else None
         validator = Draft202012Validator(self.specs[name]['input_schema'],
                                         format_checker=Draft202012Validator.FORMAT_CHECKER)
         if not isinstance(arguments, dict) or not validator.is_valid(arguments):
@@ -257,6 +262,15 @@ class Bridge:
                     if self.computer:
                         self.computer.close(self._computer_session(key))
                     del self.clients[key]
+            if require_bootstrap:
+                client_scope, rejected = resolve_scope(self.clients, client_scope, token, name == 'hermes_context')
+                if rejected:
+                    return rejected
+                if name == 'hermes_context':
+                    if not arguments.get('task', '').strip():
+                        return {'success':False, 'errorCode':'bootstrap_task_required', 'executionStarted':False,
+                                'error':'請提供本次具體 task，並以 cwd 指定工作目錄。'}
+                    arguments.setdefault('cwd', str(runtime.ROOT))
             client = self.clients.get(client_scope) if client_scope else None
             if client_scope and name != 'hermes_context' and client is None:
                 return {'success': False, 'errorCode': 'bootstrap_required',
@@ -264,24 +278,33 @@ class Bridge:
             if name == 'hermes_context':
                 result = safe_result(discovery.context(self.specs, **arguments))
                 if client_scope:
-                    self.clients[client_scope] = {'seen': now, 'cwd': arguments.get('cwd'),
-                                                  'required': result['workflow']['required_skill_ids'], 'pages': {}}
+                    self.clients[client_scope] = new_client(result, arguments.get('cwd'), arguments.get('task',''), now)
+                    self.clients[client_scope]['risk'] = result['workflow']['risk']
                     self.clients.move_to_end(client_scope)
                     while len(self.clients) > 128:
                         old, _ = self.clients.popitem(last=False)
                         if self.computer:
                             self.computer.close(self._computer_session(old))
-                tracking = 'per-mcp-transport' if client_scope and client_scope.startswith('transport:') else 'per-client-session'
+                client = self.clients.get(client_scope)
+                tracking = 'explicit-bootstrap' if client_scope and client_scope.startswith('explicit:') else 'metadata-bound'
+                state = prerequisites(client, result['workflow']['risk']) if client else {'pending':[], 'execution_ready':True}
+                result['prerequisites'] = state
                 result['bootstrap'] = {'status': 'ready', 'session_tracking': tracking if client_scope else 'local-direct',
+                                       'bootstrap_id':client['bootstrap_id'] if client else None,
+                                       'execution_ready':state['execution_ready'],
                                        'terminal_default': 'powershell',
                                        'next_step': '按任務讀取完整相關技能，再選擇檔案、PowerShell、電腦操作或 Codex 對話工具。'}
                 return result
             if client:
                 client['seen'] = now
-                pending = [skill for skill in client['required'] if client['pages'].get(skill) != 'complete']
-                if pending and not self.specs[name]['annotations']['read_only_hint']:
-                    return {'success': False, 'errorCode': 'skill_read_required', 'executionStarted': False,
-                            'required_skill_ids': pending, 'error': '先讀完本次任務的首選專用 SKILL.md，再執行操作。'}
+                state = prerequisites(client, client['risk'])
+                if not state['execution_ready'] and not self.specs[name]['annotations']['read_only_hint']:
+                    skills = [r['skill_id'] for r in state['pending'] if r['kind'] == 'skill']
+                    code = 'skill_read_required' if skills else ('instructions_read_required'
+                        if any(r['kind'] == 'project_instruction' for r in state['pending']) else 'skill_search_required')
+                    return {'success':False, 'errorCode':code,
+                            'executionStarted':False, 'required_skill_ids':skills, 'prerequisites':state,
+                            'error':'先依 prerequisites.pending 完成技能搜尋及必要閱讀，再執行寫入操作。'}
             if name == 'hermes_computer_use':
                 if self.computer is None:
                     from computer_adapter import ComputerAdapter
@@ -307,10 +330,17 @@ class Bridge:
                     approval_callback=approve, task_id=self.owner, session_id=self.owner))
             if name in ('hermes_skills_list', 'hermes_skill_read'):
                 arguments = dict(arguments)
+                if client and 'cwd' in arguments and not same_cwd(arguments['cwd'], client['cwd']):
+                    return {'success':False, 'errorCode':'bootstrap_cwd_changed', 'executionStarted':False,
+                            'error':'此 cwd 與任務初始化不同；請帶舊 bootstrap_id 重新呼叫 hermes_context(cwd,task)。'}
                 if client and 'cwd' not in arguments:
                     arguments['cwd'] = client['cwd']
             if name == 'hermes_skills_list':
-                return safe_result(discovery.skills_list(**arguments))
+                result = discovery.skills_list(**arguments)
+                if client:
+                    record_search(client, arguments, result)
+                    result['prerequisites'] = prerequisites(client, client['risk'])
+                return safe_result(result)
             if name == 'hermes_skill_read':
                 result = discovery.skill_read(**arguments)
                 if client and result.get('success') and arguments.get('file_path', 'SKILL.md') == 'SKILL.md':
@@ -318,6 +348,8 @@ class Bridge:
                     expected = client['pages'].get(skill, 0)
                     if result['offset'] == expected:
                         client['pages'][skill] = 'complete' if result['eof'] else result['next_offset']
+                if client:
+                    result['prerequisites'] = prerequisites(client, client['risk'])
                 return safe_result(result)
             if name.startswith('codex_'):
                 if name in ('codex_prepare_send', 'codex_confirm_send', 'codex_operation_status'):
@@ -358,7 +390,8 @@ class Bridge:
             if tool == 'process_manage' and arguments['action'] == 'wait':
                 wait_window = min(arguments.get('timeout', 30), 30)
                 arguments = {**arguments, 'timeout': wait_window}
-            result = self.native(tool, arguments, approval_callback=approve, task_id=self.owner, session_id=self.owner,
+            task_id = self.owner + '-' + client['bootstrap_id'] if client and tool in ('read_file','write_file','patch','search_files') else self.owner
+            result = self.native(tool, arguments, approval_callback=approve, task_id=task_id, session_id=self.owner,
                                  tool_call_id=uuid.uuid4().hex, enabled_tools=list(NATIVE))
             if isinstance(result, str):
                 try:
@@ -377,7 +410,11 @@ class Bridge:
                 browser_result = self.browser.collect(arguments['session_id'], result)
                 if browser_result is not None:
                     return browser_result
-            return safe_result(result)
+            result = safe_result(result)
+            if client and tool == 'read_file' and isinstance(result, dict):
+                record_instruction(client, arguments, result)
+                result['prerequisites'] = prerequisites(client, client['risk'])
+            return result
         finally:
             if locked:
                 self.lock.release()

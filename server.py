@@ -11,6 +11,7 @@ from mcp.server.lowlevel import Server
 from mcp.server.stdio import stdio_server
 from backend import Bridge, INSTRUCTIONS
 from computer_result import ComputerResult
+from bootstrap_state import public_specs
 
 
 def client_scope(meta):
@@ -27,12 +28,12 @@ async def main():
     bridge = Bridge()
 
     async def list_tools(ctx, params):
-        return types.ListToolsResult(tools=[types.Tool(**spec) for spec in bridge.specs.values()])
+        return types.ListToolsResult(tools=[types.Tool(**spec) for spec in public_specs(bridge.specs).values()])
 
     async def call_tool(ctx, params):
         try:
             result = await asyncio.to_thread(bridge.call, params.name, params.arguments or {},
-                                            client_scope=client_scope(ctx.meta) or f'transport:{id(ctx.session._connection)}')
+                                            client_scope=client_scope(ctx.meta), require_bootstrap=True)
             images = []
             if isinstance(result, ComputerResult):
                 images, result = result.images, result.payload

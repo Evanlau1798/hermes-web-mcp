@@ -20,20 +20,21 @@ asyncio.run(server.main())'''
             async with stdio_client(p) as streams:
                 async with ClientSession(*streams) as c:
                     await c.initialize()
-                    await c.call_tool('hermes_context',{})
-                    start=await c.call_tool('hermes_tracking',{'action':'start','kind':'codex',
+                    boot=await c.call_tool('hermes_context',{'task':'tracking fixture'})
+                    bid=boot.structured_content['bootstrap']['bootstrap_id']
+                    start=await c.call_tool('hermes_tracking',{'action':'start','kind':'codex','bootstrap_id':bid,
                         'thread_id':'11111111-1111-4111-8111-111111111111'})
                     s=start.structured_content
                     self.assertTrue(s['baseline_ready'])
-                    waited=await c.call_tool('hermes_tracking_status',{'tracking_id':s['tracking_id'],
+                    waited=await c.call_tool('hermes_tracking_status',{'tracking_id':s['tracking_id'],'bootstrap_id':bid,
                         'after_sequence':s['latest_sequence'],'wait_seconds':0.02})
                     self.assertEqual(waited.structured_content['wait']['reason'],'timeout')
                     self.assertTrue(waited.structured_content['alive'])
-                    error=await c.call_tool('hermes_read_file',{'path':'fixture-only'})
+                    error=await c.call_tool('hermes_read_file',{'path':'fixture-only','bootstrap_id':bid})
                     self.assertTrue(error.is_error)
                     self.assertEqual(error.structured_content['errorCode'],'FIXTURE')
                     self.assertEqual(error.structured_content['error'],'IMPORTANT_FAILURE')
-                    stopped=await c.call_tool('hermes_tracking',{'action':'stop','tracking_id':s['tracking_id']})
+                    stopped=await c.call_tool('hermes_tracking',{'action':'stop','tracking_id':s['tracking_id'],'bootstrap_id':bid})
                     self.assertFalse(stopped.structured_content['alive'])
         asyncio.run(run())
 

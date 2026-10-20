@@ -10,11 +10,15 @@ Hermes MCP 預設供 ChatGPT Web 使用。Web 對話涉及 Hermes、Codex 或 Wi
 {"cwd":"C:/Example/Project","task":"修復 Windows 命令結果的判讀"}
 ```
 
-以上是合成路徑範例；cwd 改成實際專案的絕對路徑。參數傳給 `hermes_context`，取得精簡能力目錄、任務相關 Available Skills 候選與專案 AGENTS.md 定位。task 填本次具體目的；切換專案或任務時再呼叫一次。原有只傳 cwd 的用法仍可使用，完整技能目錄由 skills_list 分頁展開，完整工具 schema 使用 MCP tools/list。
+以上是合成路徑範例；cwd 改成實際專案的絕對路徑。`hermes_context` 的 task 必填；未填 cwd 時使用 MCP repo 目錄，回執會列出實際目錄。先讀 harness.steps，再讀 prerequisites.pending；完整技能目錄由 skills_list 分頁展開，完整工具 schema 使用 MCP tools/list。
+
+初始化回傳 `bootstrap.bootstrap_id`。後續每個 MCP 工具都帶同一個 `bootstrap_id`；切換任務或 cwd 時，以舊 ID 呼叫 `hermes_context(cwd,task,bootstrap_id)`，改用回傳的新 ID。舊 ID 隨即失效，技能／規範閱讀狀態重新計算，已啟動的背景工作不會因此被停止。更換 MCP 程序後重新初始化，沿原操作回執查證，不重送結果不明的寫入。
 
 例如 task="準備 merge 上游最新版"，先依 workflow.next_step 讀取首選專用技能，再確認來源／目標、branch、dirty files、適用授權與驗證證據，最後執行專用流程。通用開發技能作為補充。對有候選技能的已宣告高風險任務，先連續讀完首選 SKILL.md 到 eof，寫入工具才會開始執行；讀取、搜尋仍可用。
 
-每個 Web 對話分別初始化。一般 stdio 客戶端以 MCP 連線追蹤；重啟服務或重新連線後，再呼叫 Bootstrap。看到 `bootstrap_required` 時，先呼叫 `hermes_context`，讀取導引後接續操作。
+每個 Web 對話分別初始化。有 Web session metadata 時，ID 綁定該 session；沒有 metadata 時，以本次顯式 bootstrap ID 選取獨立任務，不沿用 transport 狀態。ID 用於流程關聯，不替代 Tunnel 或 Windows 權限，也不要從其他對話複製 ID。重新初始化由 Agent 在新任務／改 cwd 時呼叫，server 不會自行讀取使用者訊息判斷任務切換。
+
+`bootstrap.status=ready` 表示已初始化；`bootstrap.execution_ready`／`prerequisites.execution_ready` 表示前置條件是否完成。pending 列出技能、AGENTS.md 及必要搜尋；技能依 next_offset 讀到 eof，規範以 read_file 從 offset=1 連續讀至結尾，閱讀回執會更新清單。未完成時仍可唯讀探索，寫入會回傳 skill_read_required／instructions_read_required／skill_search_required。高風險任務沒有匹配技能時，以 pending 指定的 query 呼叫 skills_list（offset=0）；找到技能就先讀完，仍無匹配則記為 searched_no_match。
 
 ## 按需讀取 Skills
 
@@ -44,7 +48,7 @@ Hermes MCP 預設供 ChatGPT Web 使用。Web 對話涉及 Hermes、Codex 或 Wi
 - `hermes_terminal`：預設 PowerShell 7，必要時使用 Windows PowerShell 5.1；以 shell=bash 選擇 Bash。
 
 ```json
-{"command":"Write-Output '繁體中文 English'","workdir":"C:/Example/Project"}
+{"bootstrap_id":"<本任務 bootstrap_id>","command":"Write-Output '繁體中文 English'","workdir":"C:/Example/Project"}
 ```
 
 使用 UTF-8 中文輸出。明確 exit 優先；否則保留最後的原生命令非零退出碼，PowerShell 錯誤回傳 1。非零 shell 退出仍是正常 MCP 回執：outcome=shell_exit，依 exit_code 判讀；原生執行錯誤、參數錯誤與防護拒絕則回傳工具錯誤。
@@ -56,7 +60,7 @@ output 保留原生合併輸出，stdout 提供同值別名，streams_merged=tru
 長命令設定 background=true，再以回傳 session_id 呼叫 `hermes_process_read` 查詢：
 
 ```json
-{"action":"poll","session_id":"<啟動回執的 session_id>"}
+{"bootstrap_id":"<本任務 bootstrap_id>","action":"poll","session_id":"<啟動回執的 session_id>"}
 ```
 
 `hermes_process_read` 是唯讀入口：list 列出本入口的程序、poll 讀取狀態與輸出預覽、log 以 offset／limit 分頁讀取日誌。輸入、送出 Enter、關閉 stdin 或停止，使用 `hermes_process_manage` 的 write／submit／close／kill。原入口的 list／poll／log 仍相容，新的工作流程優先用唯讀入口輪詢。
