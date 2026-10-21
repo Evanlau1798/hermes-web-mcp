@@ -21,7 +21,7 @@ status=ready 表示已初始化，execution_ready 才表示前置條件完成。
 開頁後讀 snapshot，使用觀測到的元素參照 click/fill 等，等待預期結果並回傳下一個 snapshot。中文直接寫在 code，工具會以 UTF-8 腳本執行。
 截圖使用 await page.screenshot({path: browserScreenshotPath})，工具直接回傳圖片。長工作沿用回執 session_id，以 hermes_process_read(action=poll/log) 查詢，最後一次查詢會附上截圖；需要停止時用既有 hermes_process_manage。
 每次 run 先完整讀取工具回執，若是內容參照先取得原文。status=exited 時直接使用該回執的圖片；僅 running/timeout 才查詢程序。圖片隨首次完成回執回傳，後續重複 poll 不再回傳同張圖片；log 用於完整文字輸出，poll 用於完成狀態與圖片。
-宿主若以 content_items 包裝 MCP 內容，依實際結構取出 type=image 的區塊，在同一次宿主執行中以圖片 helper 顯示其 data URL（data:<mimeType>;base64,<data>）；不要對非陣列 content 呼叫 map，也不要只回報圖片路徑。顯示後再核對畫面。
+截圖前先讀 [MCP 圖片顯示範例](references/mcp-images.md)。Web 回傳的 content 可能是字串，實際圖片在 content_items 陣列；標準 MCP 則可用 content 陣列。沿範例直接篩選 type=image，以 mimeType/data 組成 data URL，在取得原回傳的同一次宿主執行呼叫 image helper；不遞迴猜測、不輸出 base64、不只讀 structuredContent。先實際顯示及核對圖片，再以後續 browser_use 呼叫 finish；image_count 或截圖路徑不等於已目視驗證。
 guide 結果若有截短先查完整輸出，不將缺少指南結尾視為讀完。結果不明先查程序與頁面，不重送原腳本。
 先決定本步要確認的資料，再用官方 evaluate 回傳有界 JSON，例如 URL、標題、主區段與必要連結；需要元素參照才取 snapshot。遇到 popup，依官方事件／回執取得新頁標籤，再操作該頁；原頁 handle 不會自動變成新頁。SPA 操作後等待預期元素或狀態，並核對 URL 與渲染內容。
 

@@ -75,6 +75,8 @@ output 保留原生合併輸出，stdout 提供同值別名，streams_merged=tru
 
 網站操作依任務條件有界等待目標內容，不能只以 URL 或 load 判定就緒。逾時先查原程序與原分頁目前狀態，已達成就接續，仍載入則在總預算內等待；不盲目重播結果不明的動作。資料擷取逐欄核對同一主實體的來源，排除引用／回覆混入作者、時間或正文；來源矛盾標記未確認。完整流程見 [browser use 技能](skills/software-development/hermes-web-mcp-workflows/SKILL.md#瀏覽器-browser-use)，採跨網站規則，不保存特定網站 DOM。
 
+Web 截圖顯示使用 [MCP 圖片範例](skills/software-development/hermes-web-mcp-workflows/references/mcp-images.md)：保留完整回傳，在同一次宿主執行取 `content_items`（或標準 `content` 陣列）的原生圖片，呼叫圖片 helper 並核對；之後再結束 TaskSpace。`structuredContent`／JSON 文字只含狀態，圖片不在文字日誌中；`image_count=1` 不代表已顯示。不新增圖片快取或讀檔接口。
+
 | action | 使用方式 |
 | --- | --- |
 | list_apps / list_windows | 找到應用程式及視窗的 app_name、pid、window_id |
