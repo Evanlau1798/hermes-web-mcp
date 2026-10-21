@@ -174,7 +174,7 @@ def context(specs, cwd=None, task=''):
             'project_instructions': instructions,
             'skills': 'hermes_skills_list → hermes_skill_read；依 next_offset 讀到 eof，再按需讀 references。',
             'skill_updates': {'tool': 'hermes_skill_manage', 'guide': guide('skill-learning'),
-                              'learning': SKILL_LEARNING},
+                              'learning': SKILL_LEARNING, 'review_tool':'hermes_task_review'},
             'tracking': {'control': 'hermes_tracking', 'read': 'hermes_tracking_status',
                          'guide': guide('tracking')},
             'codex_delivery': {'receipt': 'codex_delivery_status', 'operation_id_required': True,

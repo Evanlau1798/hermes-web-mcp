@@ -66,7 +66,7 @@ class BrowserTests(unittest.TestCase):
         bridge = Bridge()
         self.addCleanup(bridge.close)
         self.assertIn('browser_use', bridge.specs)
-        self.assertEqual(len(bridge.specs), 27)
+        self.assertEqual(len(bridge.specs), 28)
         self.assertEqual(bridge.specs['browser_use']['title'], 'browser use')
         self.assertFalse(bridge.specs['browser_use']['annotations']['read_only_hint'])
         for args in ({'action': 'run'}, {'action': 'guide', 'code': 'x'},

@@ -23,7 +23,7 @@ async def main():
             async with ClientSession(*streams, elicitation_callback=approve) as client:
                 await client.initialize()
                 tools = (await client.list_tools()).tools
-                assert len(tools) == 27
+                assert len(tools) == 28
                 assert next(t for t in tools if t.name == 'hermes_memory_read').annotations.read_only_hint
                 process_read = next(t for t in tools if t.name == 'hermes_process_read')
                 assert process_read.annotations.read_only_hint
@@ -43,7 +43,7 @@ async def main():
                     assert reply.structured_content == data, 'Web clients need structured results as well as text'
                     return data
                 overview = await call('hermes_context', {'task':'isolated stdio smoke'})
-                assert len(overview['tools']) == 27 and overview['computer_use']['exposed']
+                assert len(overview['tools']) == 28 and overview['computer_use']['exposed']
                 assert overview['processes']['read'] == 'hermes_process_read'
                 skills = await call('hermes_skills_list', {'limit': 1})
                 assert skills['total'] > 0
@@ -74,7 +74,7 @@ async def main():
                 assert legacy['status'] == 'running', legacy
                 killed = await call('hermes_process_manage', {'action': 'kill', 'session_id': session_id})
                 assert killed.get('status') != 'running', killed
-                print('PASS: 27 stdio tools, readonly metadata, UTF-8, PowerShell, owned list/poll/log, rejected kill/foreign, legacy poll/kill')
+                print('PASS: 28 stdio tools, readonly metadata, UTF-8, PowerShell, owned list/poll/log, rejected kill/foreign, legacy poll/kill')
     finally:
         target.unlink(missing_ok=True)
 

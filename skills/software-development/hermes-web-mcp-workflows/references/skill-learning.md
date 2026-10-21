@@ -12,4 +12,4 @@ Web Agent 在收到人類對風格、格式、語氣或流程的修正，找到�
 
 檢查 validation、lint、rollback 與核准回執，成功後重讀核對。approval_required／staged 表示等待批准，不是已保存；拒絕或核准通道不可用就回報，不用一般檔案／terminal 繞過。結果不明先查證，不自動重送。明確 read-before-write 拒絕時重讀指定目標，僅重試一次，不迴圈。
 
-結尾只回報實際更新與待核准狀態，不宣稱其他既有對話的提示即時刷新。
+hermes_task_review 的 new_reusable_learning 只表示值得維護，不表示已寫入。結尾分開回報 Review、實際更新與待核准狀態，不宣稱其他既有對話的提示即時刷新。

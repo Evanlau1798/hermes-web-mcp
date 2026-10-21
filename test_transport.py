@@ -45,7 +45,7 @@ asyncio.run(server.main())'''
                 async with ClientSession(*streams) as client:
                     await client.initialize()
                     catalog = (await client.list_tools()).tools
-                    self.assertEqual(len(catalog), 27)
+                    self.assertEqual(len(catalog), 28)
                     self.assertEqual(next(t for t in catalog if t.name == 'browser_use').title, 'browser use')
                     reading = next(t for t in catalog if t.name == 'hermes_process_read')
                     self.assertTrue(reading.annotations.read_only_hint)
@@ -61,6 +61,11 @@ asyncio.run(server.main())'''
                     self.assertFalse(bootstrap.is_error)
                     self.assertEqual(bootstrap.structured_content['bootstrap']['terminal_default'], 'powershell')
                     bid = bootstrap.structured_content['bootstrap']['bootstrap_id']
+                    review = await client.call_tool('hermes_task_review', {'action':'submit',
+                        'result':'no_new_learning','reason':'isolated transport fixture','bootstrap_id':bid}, meta=a)
+                    self.assertEqual(review.structured_content['version'],1)
+                    denied_review = await client.call_tool('hermes_task_review', {'action':'read','bootstrap_id':bid},meta=b)
+                    self.assertTrue(denied_review.is_error)
                     args['bootstrap_id'] = bid
                     process_list = await client.call_tool('hermes_process_read', {'action': 'list', 'bootstrap_id':bid}, meta=a)
                     self.assertFalse(process_list.is_error)

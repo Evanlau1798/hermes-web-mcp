@@ -134,7 +134,7 @@ Invoke-WebRequest "$healthUrl/readyz" -TimeoutSec 10
 
 新增工具後若 context 已顯示 browser_use，但 Web 無法發現可呼叫的工具，到現有 Hermes 外掛的 Manage → Refresh tools 同步目錄，核對只新增 browser_use，再開獨立 Web 對話驗證；沿用原有連線與權限。
 
-在新 Web 對話先 `hermes_context(cwd,task)`，確認 27 個工具包含 prepare／confirm／operation_status、process_read、computer_use、browser_use。每個後續工具皆帶回 bootstrap.bootstrap_id；新任務或改目錄時帶舊 ID 重新初始化，改用新 ID。MCP tools/list 的 schema 也會標示必填欄位；舊客戶端同步工具清單後再測。檔案與程序測試使用獨立 fixture；記憶測試使用可辨識條目並刪除；Computer Use 使用獨立測試視窗。Codex 先只讀 list/status，控制只用人類另行授權的測試對話，不用原工作或 Pro 模型。
+在新 Web 對話先 `hermes_context(cwd,task)`，確認 28 個工具包含 task_review、prepare／confirm／operation_status、process_read、computer_use、browser_use。每個後續工具皆帶回 bootstrap.bootstrap_id；新任務或改目錄時帶舊 ID 重新初始化，改用新 ID。MCP tools/list 的 schema 也會標示必填欄位；舊客戶端同步工具清單後再測。檔案與程序測試使用獨立 fixture；記憶測試使用可辨識條目並刪除；Computer Use 使用獨立測試視窗。Codex 先只讀 list/status，控制只用人類另行授權的測試對話，不用原工作或 Pro 模型。
 
 Bootstrap 驗收另測：同一 transport 的兩個 metadata-free context 取得不同 ID，省略 ID 不可沿用先前狀態；跨 metadata session 的 ID 被拒絕；重新初始化後舊 ID 失效。使用測試 AGENTS.md 及高風險技能驗證 pending → 連續讀完 → execution_ready，再切換任務確認 pending 重設。ID 是流程關聯，沒有擴大本機權限；未讀 references、是否理解指引及是否主動重初始化仍須觀察 Agent 實際行為。
 

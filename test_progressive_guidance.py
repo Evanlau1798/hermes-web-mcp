@@ -30,7 +30,7 @@ class ProgressiveGuidanceTests(unittest.TestCase):
             self.assertNotIn('80000', json.dumps(context, ensure_ascii=False))
             self.assertNotIn('completion_predicate', json.dumps(context, ensure_ascii=False))
             self.assertNotIn('guide', context['skill_updates']['learning'])
-            self.assertEqual(len(context['tools']), 27)
+            self.assertEqual(len(context['tools']), 28)
 
     def test_workflow_core_links_readable_on_demand_references(self):
         root = runtime.ROOT/'skills/software-development/hermes-web-mcp-workflows'

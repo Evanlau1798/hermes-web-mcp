@@ -23,7 +23,7 @@ class BridgeTests(unittest.TestCase):
                     'codex_list', 'codex_status', 'codex_read', 'codex_send', 'codex_resume', 'codex_stop',
                     'hermes_context', 'hermes_skills_list', 'hermes_skill_read', 'hermes_computer_use',
                     'hermes_skill_manage', 'hermes_tracking', 'hermes_tracking_status', 'codex_delivery_status',
-                    'codex_prepare_send', 'codex_confirm_send', 'codex_operation_status'}
+                    'codex_prepare_send', 'codex_confirm_send', 'codex_operation_status', 'hermes_task_review'}
         self.assertEqual(set(self.bridge.specs), expected)
         self.bridge.call('hermes_read_file', {'path': 'G:/test.txt'})
         name, args, context = self.calls[-1]
