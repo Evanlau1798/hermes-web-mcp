@@ -7,6 +7,11 @@ import discovery
 
 
 class TaskReviewTests(unittest.TestCase):
+    def test_host_discovery_keeps_review_arguments_in_one_flat_object(self):
+        from task_review import SCHEMA
+        self.assertNotIn('oneOf',SCHEMA)
+        self.assertTrue({'action','result','reason','skill_ids','evidence','expected_version'} <= SCHEMA['properties'].keys())
+
     def setUp(self):
         self.native = Mock()
         self.bridge = Bridge(native=self.native)
@@ -54,6 +59,10 @@ class TaskReviewTests(unittest.TestCase):
             self.assertEqual(self.call({'action':'read'})['state'],'pending')
         with self.assertRaises(ValueError):
             self.call({'action':'submit','result':'unsupported'})
+        with self.assertRaises(ValueError):
+            self.call({'action':'read','reason':'unexpected'})
+        with self.assertRaises(ValueError):
+            self.call({'action':'submit','result':'no_new_learning'})
         result=self.call({'action':'submit','result':'covered_by_existing_skill','reason':'existing'})
         self.assertEqual(result['errorCode'],'REVIEW_EVIDENCE_REQUIRED')
         result=self.call({'action':'submit','result':'new_reusable_learning','skill_ids':['fixture'],

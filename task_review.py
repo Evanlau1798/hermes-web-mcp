@@ -11,10 +11,7 @@ SCHEMA = {'type':'object', 'required':['action'], 'properties':{
     'skill_ids':{'type':'array','maxItems':8,'uniqueItems':True,
                  'items':{'type':'string','minLength':1,'maxLength':300}},
     'evidence':{'type':'array','maxItems':8,'items':{'type':'string','minLength':1,'maxLength':300}},
-    'expected_version':{'type':'integer','minimum':0,'maximum':2147483647}},
-    'oneOf':[{'properties':{'action':{'const':'submit'}},'required':['result','reason']},
-             {'properties':{'action':{'const':'read'}},
-              'not':{'anyOf':[{'required':[key]} for key in ('result','reason','skill_ids','evidence','expected_version')]}}]}
+    'expected_version':{'type':'integer','minimum':0,'maximum':2147483647}}}
 
 
 def pending():
@@ -26,7 +23,11 @@ def review(client, args):
         return {'success':False,'errorCode':'bootstrap_required','executionStarted':False}
     current = client['task_review']
     if args['action'] == 'read':
+        if any(key != 'action' for key in args):
+            raise ValueError('read 只接受 action；不修改 Review 紀錄。')
         return copy.deepcopy(current)
+    if not all(key in args for key in ('result','reason')):
+        raise ValueError('submit 必須提供 result 與 reason。')
     data = {'result':args['result'], 'reason':redact_sensitive_text(args['reason']),
             'skill_ids':[redact_sensitive_text(s) for s in args.get('skill_ids',[])],
             'evidence':[redact_sensitive_text(s) for s in args.get('evidence',[])]}
