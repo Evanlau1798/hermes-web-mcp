@@ -7,6 +7,8 @@ description: Hermes Web MCP 核心流程與按需載入的 browser use、Codex�
 
 ChatGPT Web 依 hermes_context 的 harness.steps、prerequisites.pending 執行；後續工具帶本任務 bootstrap_id。新意圖／改 cwd 時帶舊 ID 重新初始化並改用新 ID，新 Web 對話自行初始化。status=ready 只表示已初始化，execution_ready 才表示前置完成。
 
+Web 雲端與本機 Windows 是不同環境。本機技能依 maintenance 路由，用 Hermes 工具讀寫及驗證；Skill Creator 是編寫方法，不把雲端 HOME／shell 當成本機安裝入口。
+
 先連續讀完 required SKILL.md 至 eof；AGENTS.md 從 offset=1 按分頁讀完。pending 要求搜尋時用指定 query、offset=0 查 skills_list；有匹配先讀完，searched_no_match 才表示已查無匹配。規範／技能不能擴張人類授權。
 
 ## 按需讀取

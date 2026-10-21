@@ -166,6 +166,8 @@ $entry = Join-Path ([Environment]::GetFolderPath('Startup')) 'Hermes_Local_Tools
 
 ## 7. 驗證與更新
 
+技能路由由本機端解析：Hermes 為目前 profile 的 skills 根目錄；Codex user／system 尊重本機 `CODEX_HOME`（未設才使用使用者家目錄的 `.codex`），使用者 `.agents/skills` 與專案 `.agents/skills` 分開列出。空值或相對 `CODEX_HOME` 會拒絕探索，不回退猜測。這些 targets／maintenance 資訊不授予寫入權限；保留原生保護，不以雲端拒絕為由改入口繞過。本機技能驗收使用可丟棄的獨立目標，分別經 Hermes 原生維護及明確授權的 Codex 檔案工具更新，再用本機讀回／驗證核對；雲端草稿或 shell 驗證不算本機安裝證據。系統技能與外掛套件不自動改寫。
+
 在 repo 根目錄執行，先設定 `$env:HERMES_MCP_PYTHON` 為上述 PM Python：
 
 ```powershell

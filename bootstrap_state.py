@@ -7,7 +7,7 @@ import uuid
 
 HARNESS = {
     'name': 'Hermes Harness — ChatGPT Web 工具執行框架',
-    'role': 'Web Agent 推理；Hermes 提供工具、技能、回執與原生防護。',
+    'role': 'Web Agent 推理；Hermes 在本機 Windows 執行。雲端 HOME／shell 不代表本機技能環境；依 maintenance 路由讀寫及驗證。',
     'steps': [
         {'tool':'hermes_context', 'use':'新任務／改 cwd 以 cwd + task 初始化；後續帶 bootstrap_id。重初始化帶舊 ID，之後改用新 ID；新 Web 對話自行初始化。'},
         {'tool':'hermes_skill_read', 'use':'依 prerequisites.pending 連續讀技能至 eof；AGENTS.md 用 read_file 分頁讀完。按 workflow 技能索引僅讀本次適用主題；no_match 依 pending 搜尋。'},

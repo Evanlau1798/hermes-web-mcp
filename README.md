@@ -137,6 +137,8 @@ Codex 背景操作先讀 summary：compact=not_required 表示跳過，delivery=
 
 ## 共用記憶
 
+本機技能維護依 `hermes_context.skill_updates.targets` 與 Skill 回執的 `maintenance` 路由：Hermes 使用 `hermes_skill_manage`；人類明確要求的本機 Codex／project 技能使用 Hermes 檔案／終端工具；系統技能僅供參考。`local-windows` 表示 MCP 所在電腦，與 ChatGPT 雲端 HOME／shell 分開。Skill Creator 提供編寫方法，不決定安裝目標。寫入後在本機讀回及驗證，原生核准與拒絕機制不變。
+
 `hermes_memory_read(target)` 讀取 memory 或 user 條目與容量。`hermes_memory_edit` 使用原生 add、patch、remove 或 operations 批次語意。先讀取，再精確更新長期偏好或事實。
 
 ## 連線與啟動
