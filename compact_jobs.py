@@ -15,11 +15,11 @@ class CompactJobs:
     MAX_RECEIPTS = 10000
     ACTIVE = ('awaiting_confirmation', 'confirming', 'compacting', 'sending')
     UUID = re.compile(r'^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$', re.I)
-    OPERATION_ID = re.compile(r'^[A-Za-z0-9_-]{8,119}$')
+    OPERATION_ID = re.compile(r'^[A-Za-z0-9_-]{8,128}$')
     DELIVERY_STATES = {'accepted', 'unknown', 'not-sent', 'failed', 'rejected'}
 
     def __init__(self, api, root=None, poll_interval=2.0, deadline_seconds=180,
-                 clock=None, sleep=None):
+                 clock=None, sleep=None, recover=True):
         if not callable(api):
             raise ValueError('api must be callable')
         if isinstance(poll_interval, bool) or not isinstance(poll_interval, (int, float)) \
@@ -56,7 +56,7 @@ class CompactJobs:
             now = time.time()
             db.execute('''UPDATE jobs SET state='interrupted', error_code='PROCESS_RESTARTED', updated_at=?,
                 delivery_state=CASE WHEN delivery_started_at IS NOT NULL THEN 'unknown' ELSE delivery_state END
-                WHERE state IN ('awaiting_confirmation','confirming','compacting','sending')''', (now,))
+                WHERE state IN ('awaiting_confirmation','confirming','compacting','sending') AND ?''', (now, int(recover)))
 
     @contextmanager
     def _db(self):
@@ -87,29 +87,9 @@ class CompactJobs:
             return cursor.rowcount == 1
 
     def _view(self, row):
+        from operation_summary import compact_receipt
         worker = self.jobs.get(row['operation_id'])
-        complete = bool(row['compact_complete'])
-        compact_state = {'turnId': row['compact_turn_id'] if complete else row['baseline_compact_turn_id'],
-                         'completedAt': row['compact_completed_at'] if complete else row['baseline_compact_completed_at'],
-                         'lastTurnIsCompaction': complete or bool(row['baseline_compacted']),
-                         'nativeCompactionItemSeen': True if complete else row['baseline_native_compaction_item_seen']}
-        return {'ok': row['state'] not in ('rejected', 'canceled', 'interrupted', 'compaction_failed',
-                                           'compaction_unknown', 'compaction_timeout', 'delivery_unknown',
-                                           'delivery_not_sent', 'delivery_failed'),
-                'operation_id': row['operation_id'], 'thread_id': row['thread_id'],
-                'delivery_operation_id': row['delivery_operation_id'],
-                'baseline_turn_id': row['baseline_turn_id'], 'compact_turn_id': row['compact_turn_id'],
-                'baseline_completed_at': row['baseline_completed_at'],
-                'baseline_compacted': bool(row['baseline_compacted']), 'compactState': compact_state,
-                'state': row['state'], 'worker_alive': bool(worker and worker.is_alive()),
-                'compact_complete': bool(row['compact_complete']), 'delivery_state': row['delivery_state'],
-                'reconfirmation_required': row['state'] == 'interrupted',
-                'errorCode': row['error_code'], 'created_at': row['created_at'],
-                'updated_at': row['updated_at'], 'confirmed_at': row['confirmed_at'],
-                'compact_started_at': row['compact_started_at'],
-                'summary': summarize(row), 'compact_completed_at': row['compact_completed_at'],
-                'delivery_started_at': row['delivery_started_at'],
-                'delivery_completed_at': row['delivery_completed_at']}
+        return compact_receipt(row, bool(worker and worker.is_alive()))
 
     def _read_snapshot(self, thread_id, expected_title):
         try:
@@ -483,8 +463,9 @@ class CompactJobs:
             if not self.closed:
                 self.closed = True
                 with self._db() as db:
-                    db.execute('''UPDATE jobs SET state='interrupted',error_code='CLOSED',updated_at=?
-                        WHERE state IN ('awaiting_confirmation','confirming')''', (time.time(),))
+                    db.executemany('''UPDATE jobs SET state='interrupted',error_code='CLOSED',updated_at=?
+                        WHERE operation_id=? AND state IN ('awaiting_confirmation','confirming')''',
+                        [(time.time(),key) for key in self.payloads])
                 for operation_id in list(self.payloads):
                     row = self._row(operation_id)
                     if row and row['state'] == 'interrupted':

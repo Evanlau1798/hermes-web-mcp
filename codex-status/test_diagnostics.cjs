@@ -44,10 +44,23 @@ test('handshake timeout and malformed payload identify separate stages',async t=
 });
 module.exports={fixture,catalog,ID};
 
+test('active send keeps native queue and rejects a changed active baseline',async t=>{
+  let sent=0;
+  const pipe=await fixture(t,r=>{
+    if(r.method==='tools/list')return {tools:[...catalog.tools,{name:'send_message_to_thread',namespace:'codex_app'}]};
+    if(r.params.tool==='read_thread')return {success:true,contentItems:[{type:'inputText',text:JSON.stringify({
+      thread:{id:ID,kind:'codex',title:'target',status:{type:'active'}},turns:[{id:'live',status:'inProgress'}]})}]};
+    sent++;return {success:true};
+  });
+  assert.equal((await send(ID,'test',{pipe,expectedTitle:'target',expectedBaselineTurnId:'live',activeBaseline:true})).deliveryState,'accepted');
+  await assert.rejects(send(ID,'test',{pipe,expectedTitle:'target',expectedBaselineTurnId:'old',activeBaseline:true}),e=>e.code==='TARGET_CHANGED');
+  assert.equal(sent,1);
+});
+
 test('compact policy uses real completion time and cannot mistake stale notLoaded for active',()=>{
   const {preflight}=require('./compact.cjs');const now=Date.now();
   const state=(type,turn)=>({thread:{status:{type}},turns:[turn]});
-  assert.equal(preflight(state('idle',{id:'t',status:'completed',completedAt:(now-1800001)/1000}),now).required,true);
+  assert.equal(preflight(state('idle',{id:'t',status:'completed',completedAt:(now-1800001)/1000}),now).required,false);
   assert.equal(preflight(state('idle',{id:'t',status:'completed',completedAt:new Date(now-1800000).toISOString()}),now).required,false);
   assert.equal(preflight(state('active',{id:'t',status:'inProgress',completedAt:null}),now).required,false);
   assert.throws(()=>preflight(state('notLoaded',{id:'t',status:'inProgress'})),e=>e.code==='THREAD_STATE_UNCONFIRMED');

@@ -61,6 +61,15 @@ def wait_for(predicate, timeout=2):
 
 
 class CompactJobsTests(unittest.TestCase):
+    def test_close_only_interrupts_owned_pending_jobs(self):
+        with tempfile.TemporaryDirectory() as folder:
+            first=CompactJobs(FakeAPI([snapshot()]),root=folder,recover=False)
+            first.prepare(THREAD_ID,'Exact title','original','owner-first-0001')
+            other=CompactJobs(FakeAPI(),root=folder,recover=False)
+            other.close()
+            self.assertEqual(first.status('owner-first-0001')['state'],'awaiting_confirmation')
+            first.close()
+
     def manager(self, api, folder, **kwargs):
         return CompactJobs(api, root=folder, **kwargs)
 

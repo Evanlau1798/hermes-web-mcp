@@ -130,9 +130,9 @@ Invoke-WebRequest "$healthUrl/readyz" -TimeoutSec 10
 
 外掛簡介：
 
-> Hermes Harness 是 ChatGPT Web 的本機工具框架。處理 Hermes、Codex、Windows 或網站任務時，先 hermes_context(cwd,task)，依 harness.steps 與 prerequisites.pending 完成閱讀，後續帶回 bootstrap_id；換任務或 cwd 重新初始化。按 context 各主題 guide 與 workflow 技能索引，只讀本次適用 references。網站用 browser_use：完整讀目前版本官方 guide，再 run；截圖前讀 mcp-images 範例。長工作沿 session_id 查 hermes_process_read。修正與已驗證解法依 skill_updates.guide 維護技能。本機原生 Codex 使用自己的工具，僅依人類明確要求調用 Hermes。
+> Hermes Harness 是 ChatGPT Web 的本機工具框架。處理 Hermes、Codex、Windows 或網站任務時，先 hermes_context(cwd,task)，依 harness.steps 與 prerequisites.pending 完成閱讀，後續帶回 bootstrap_id；換任務或 cwd 重新初始化。按 context 各主題 guide 與 workflow 技能索引，只讀本次適用 references。網站用 browser_use：完整讀目前版本官方 guide，再 run；截圖前讀 mcp-images 範例。長工作沿 session_id 查 hermes_process_read；Codex 傳訊使用 codex_send，共用 operation_status 回執。完成驗證與清理後提交 hermes_task_review；有新通用經驗才按 skill_updates.guide 維護技能。本機原生 Codex 使用自己的工具，僅依人類明確要求調用 Hermes。
 
-新增工具後若 context 已顯示 browser_use，但 Web 無法發現可呼叫的工具，到現有 Hermes 外掛的 Manage → Refresh tools 同步目錄，核對只新增 browser_use，再開獨立 Web 對話驗證；沿用原有連線與權限。
+新增工具後若 context 已顯示 browser_use，但 Web 無法發現可呼叫的工具，到現有 Hermes 外掛的 Manage → Refresh tools 同步目錄，核對目前 28 個工具包含 browser_use 與 hermes_task_review，再開獨立 Web 對話驗證；沿用原有連線與權限。
 
 在新 Web 對話先 `hermes_context(cwd,task)`，確認 28 個工具包含 task_review、prepare／confirm／operation_status、process_read、computer_use、browser_use。每個後續工具皆帶回 bootstrap.bootstrap_id；新任務或改目錄時帶舊 ID 重新初始化，改用新 ID。MCP tools/list 的 schema 也會標示必填欄位；舊客戶端同步工具清單後再測。檔案與程序測試使用獨立 fixture；記憶測試使用可辨識條目並刪除；Computer Use 使用獨立測試視窗。Codex 先只讀 list/status，控制只用人類另行授權的測試對話，不用原工作或 Pro 模型。
 
@@ -140,7 +140,7 @@ Bootstrap 驗收另測：同一 transport 的兩個 metadata-free context 取得
 
 browser use 另需同一 Windows 帳號已安裝並初始化 Ego Lite。執行檔依 `HERMES_MCP_EGO_BROWSER`（有效絕對 `.exe` 路徑）、PATH、使用者目錄下 `.local/share/ego/active_version_dir/ego-browser.exe` 尋找，無需固定版本目錄。launcher 會轉送此非機密設定。依官方指南操作獨立 TaskSpace，測試 guide、開頁、快照、點擊、繁體中文填寫與截圖；原有 MCP 新增一個工具即可，不另建 Tunnel。執行中的腳本留在忽略的 `tmp/browser-use/`，正常完成並查詢後清除；結果不明先查程序，不重新執行腳本。MCP 異常退出留下的目錄僅能在確認相關操作已停止後清除。
 
-相容的手動 `codex_confirm_send` 仍要求人類已明確選擇，`confirmed_by_user` 是代理對該選擇的聲明，不是身分憑證／宿主批准。預設 Web 傳訊使用 prepare_send 自動流程，不另發 Compact 選擇詢問或 elicitation。送達以回傳的 `delivery_operation_id` 查證，不自行組合 ID。
+相容的手動 `codex_confirm_send` 仍要求人類已明確選擇，`confirmed_by_user` 是代理對該選擇的聲明，不是身分憑證／宿主批准。預設 Web 傳訊使用 codex_send 統一流程，prepare_send／resume 為相容入口，不另發 Compact 選擇詢問或 elicitation。送達以回傳的 `delivery_operation_id` 查證，不自行組合 ID。
 
 ## 6. 登入自啟動
 

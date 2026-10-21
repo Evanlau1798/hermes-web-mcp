@@ -137,6 +137,18 @@ class BrowserAdapter:
             except Exception:
                 result['log_availability'] = 'unavailable'
         images = []
+        from backend import process_registry
+        native_session = process_registry.get(session)
+        if native_session is not None:
+            with native_session._lock:
+                total = native_session.total_output_chars
+                retained = len(native_session.output_buffer) if isinstance(native_session.output_buffer, str) else None
+            if type(total) is int and retained is not None:
+                lost = max(0, total-retained)
+                result['output_history'] = {'scope':'retained_rolling_buffer','evicted_raw_chars':lost,
+                    'complete_history_available':lost == 0,
+                    'notice':'原生緩衝已淘汰較早輸出，無法完整還原歷史。' if lost else '僅保證目前保留的滾動緩衝。'}
+                if lost: result['truncated'] = True
         if folder is not None and result.get('status') in ('exited', 'completed', 'already_exited') \
                 and result.get('completion_reason', 'exited') == 'exited':
             image = folder / 'screenshot.png'

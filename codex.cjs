@@ -15,7 +15,7 @@ process.stdin.on('end',async()=>{
   try{
     if(oversized)throw Object.assign(Error('Codex input exceeds 1 MiB; operation not dispatched'),
                                     {code:'INPUT_TOO_LARGE',deliveryState:'not-sent'});
-    const {action,thread_id,message,expected_title,expected_baseline_turn_id,skip_compaction,compact,limit,offset,cursor,turn_limit,message_limit,max_chars}=JSON.parse(input);
+    const {action,thread_id,message,expected_title,expected_baseline_turn_id,active_baseline,skip_compaction,compact,limit,offset,cursor,turn_limit,message_limit,max_chars}=JSON.parse(input);
     if(!['list','status','read','stop','send','resume','compact_start'].includes(action))throw Error('unsupported action');
     let options;
     try{
@@ -23,7 +23,7 @@ process.stdin.on('end',async()=>{
       if(!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(options.callerThreadId))throw Error('Invalid routing context');
       options={callerThreadId:options.callerThreadId};
     }catch{throw Object.assign(Error('Configure runtime/codex-context.json with an existing local Desktop routing context; operation not dispatched'),{code:'CODEX_CONTEXT_REQUIRED'});}
-    const targetOptions={...options,expectedTitle:expected_title,expectedBaselineTurnId:expected_baseline_turn_id,skipCompaction:skip_compaction===true};
+    const targetOptions={...options,expectedTitle:expected_title,expectedBaselineTurnId:expected_baseline_turn_id,activeBaseline:active_baseline===true,skipCompaction:skip_compaction===true};
     let result;
     if(['list','status','read'].includes(action))result=await bridge.query(action,thread_id,
       {...options,compact,limit,offset,cursor,turn_limit,message_limit,max_chars});

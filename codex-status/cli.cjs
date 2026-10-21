@@ -12,7 +12,7 @@ function persistentCall(action,args){
   }
   const child=spawnSync(configured??'python',
     [path.join(__dirname,'../codex_adapter.py')],{input:JSON.stringify({action,...args}),encoding:'utf8',
-      windowsHide:true,timeout:60000,maxBuffer:200000});
+      windowsHide:true,timeout:650000,maxBuffer:200000});
   try{return JSON.parse(child.stdout);}
   catch{return {ok:false,errorCode:child.error?.code==='ENOENT'?'PYTHON_NOT_FOUND':'CLI_OUTCOME_UNCONFIRMED',
     deliveryState:child.error?.code==='ENOENT'?'not-sent':'unknown',automaticRetrySafe:false,
@@ -31,11 +31,13 @@ async function main(args,api=bridge,deliver=persistentCall){
   const [command,id,file]=args;
   if((command==='list'&&args.length===1)||(['status','read'].includes(command)&&args.length===2))return api.query(command,id);
   if(command==='stop'&&args.length===2)return api.stop(id);
+  if(['operation-status','delivery-status'].includes(command)&&args.length===2)
+    return deliver(command.replace('-','_'),{operation_id:id});
   if(command==='send'&&args.length===5)return deliver('send',{
     thread_id:id,message:messageFile(file),operation_id:args[3],expected_title:args[4]});
   if(command==='resume'&&(args.length===4||args.length===5))return deliver('resume',{
     thread_id:id,operation_id:args[2],expected_title:args[3],...(args[4]?{message:messageFile(args[4])}:{})});
-  throw Error('Usage: node cli.cjs list | status/read/stop THREAD_ID | send THREAD_ID MESSAGE_FILE OPERATION_ID EXPECTED_TITLE | resume THREAD_ID OPERATION_ID EXPECTED_TITLE [MESSAGE_FILE]');
+  throw Error('Usage: node cli.cjs list | status/read/stop THREAD_ID | operation-status/delivery-status OPERATION_ID | send THREAD_ID MESSAGE_FILE OPERATION_ID EXPECTED_TITLE | resume THREAD_ID OPERATION_ID EXPECTED_TITLE [MESSAGE_FILE]');
 }
 if(require.main===module){
   main(process.argv.slice(2)).then(result => {

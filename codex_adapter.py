@@ -122,6 +122,15 @@ class CodexAdapter:
                 'suggestedAction': '用 codex_status/read 查證目標；保留 requestId 排錯，不自動重送寫入。'}
 
 
+def wait_cli_result(bridge, result):
+    import time
+    deadline=time.monotonic()+600
+    while result.get('worker_alive') and time.monotonic()<deadline:
+        time.sleep(2)
+        result=bridge.call('codex_operation_status',{'operation_id':result['operation_id']})
+    return result
+
+
 def main():
     import sys
     from backend import Bridge
@@ -132,10 +141,12 @@ def main():
             raise ValueError('輸入超過 1 MiB。')
         payload = json.loads(raw.decode('utf-8-sig'))
         if not isinstance(payload, dict) or payload.get('action') not in (
-                'list', 'status', 'read', 'send', 'resume', 'stop', 'delivery_status'):
+                'list', 'status', 'read', 'send', 'resume', 'stop', 'delivery_status', 'operation_status'):
             raise ValueError('action 無效。')
         action = payload.pop('action')
         result = bridge.call('codex_' + action, payload)
+        if action in ('send','resume'):
+            result=wait_cli_result(bridge,result)
     except (ValueError, UnicodeError):
         result = {'ok': False, 'errorCode': 'INVALID_CLI_INPUT', 'deliveryState': 'not-sent',
                   'automaticRetrySafe': False, 'error': 'CLI JSON 或參數無效；請使用與 MCP 相同的 schema，傳訊須 operation_id 與 expected_title。'}

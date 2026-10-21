@@ -1,5 +1,5 @@
 """Automatic send policy and backward-compatible manual compaction contracts."""
-OP = {'type': 'string', 'minLength': 8, 'maxLength': 80, 'pattern': '^[A-Za-z0-9_-]+$'}
+OP = {'type': 'string', 'minLength': 8, 'maxLength': 128, 'pattern': '^[A-Za-z0-9_-]+$'}
 PREPARE = {'type': 'object', 'required': ['thread_id', 'expected_title', 'message', 'operation_id'], 'properties': {
     'thread_id': {'type': 'string', 'format': 'uuid'},
     'expected_title': {'type': 'string', 'minLength': 1, 'maxLength': 65536},
@@ -12,16 +12,14 @@ STATUS = {'type': 'object', 'required': ['operation_id'], 'properties': {'operat
 
 
 def dispatch(bridge, name, arguments):
-    if bridge.compact_jobs is None:
-        from compact_jobs import CompactJobs
-        bridge.compact_jobs = CompactJobs(bridge.codex)
+    if bridge.send_coordinator is None:
+        from send_coordinator import SendCoordinator
+        bridge.send_coordinator = SendCoordinator(bridge.codex, jobs=bridge.compact_jobs)
     args = dict(arguments)
-    if name == 'prepare_send':
-        result = bridge.compact_jobs.prepare(**args)
-        if result.get('state') == 'awaiting_confirmation':
-            return bridge.compact_jobs.confirm(args['operation_id'], 'auto')
-        return result
+    if name in ('prepare_send','send','resume'):
+        return bridge.send_coordinator.submit(**args)
     if name == 'confirm_send':
         args.pop('confirmed_by_user')
-        return bridge.compact_jobs.confirm(**args)
-    return bridge.compact_jobs.status(args.pop('operation_id'), **args)
+        return bridge.send_coordinator.confirm(**args)
+    if name == 'delivery_status': return bridge.send_coordinator.delivery_status(**args)
+    return bridge.send_coordinator.status(args.pop('operation_id'), **args)

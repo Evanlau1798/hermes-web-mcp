@@ -112,6 +112,7 @@ class Bridge:
         from tracking import TrackingManager
         self.tracking = TrackingManager()
         self.compact_jobs = None
+        self.send_coordinator = None
         self.specs = {}
         from task_review import SCHEMA as REVIEW_SCHEMA
         self._add('hermes_task_review', '任務收尾判斷：submit 記錄無新學習、已有規則覆蓋或新通用經驗；read 查回執。修正判斷先 read，再帶 expected_version。只記錄 Agent 判斷，技能更新另用 skill_manage。',
@@ -120,7 +121,7 @@ class Bridge:
         self._add('browser_use', 'browser use：先讀 context.browser_use.guide，guide 完整讀目前版本 Ego 官方指南；run 執行 JavaScript 開頁、快照、點擊、輸入與截圖。同任務沿用 TaskSpace，有界等待主內容，逾時先查原狀態。截圖前讀 references/mcp-images.md，從原回傳 content_items／content 陣列以宿主 image helper 顯示核對，再另呼叫 finish。長操作沿原 session_id 查 process_read。', copy.deepcopy(BROWSER_SCHEMA), False)
         self.specs['browser_use']['title'] = 'browser use'
         from compact_tools import PREPARE, CONFIRM, STATUS
-        self._add('codex_prepare_send', '使用者要求發訊後啟動背景傳訊：最新完成 turn 不是 Compact、目前上下文 >80000 tokens 且完成時間距今 >30 分鐘，則先原生 Compact 再傳原訊息；否則直接傳。不額外詢問，以 operation_status 查結果。operation_id 綁定原訊息。',
+        self._add('codex_prepare_send', 'codex_send 的相容別名：相同 operation_id 共用同一協調流程與回執，推薦直接用 codex_send。以 operation_status 查結果，不另派送。',
                   copy.deepcopy(PREPARE), False)
         self._add('codex_confirm_send', '使用者明確選擇後確認：compact 背景執行原生壓縮，確認完成後才傳原訊息；send_without_compact 依使用者選擇直接傳；cancel 取消尚未開始的操作。確認後用唯讀 codex_operation_status 等待，不重送。',
                   copy.deepcopy(CONFIRM), False)
@@ -214,6 +215,8 @@ class Bridge:
                     required.append('message')
             self._add('codex_' + action, 'Codex：' + label + '。列表長標題僅預覽，操作前用 status/read 原樣取得同一筆 ID 與完整名稱；須有人類明確要求，禁止猜測或自動重送。accepted 不代表完成，最新進度優先 status，歷史以 read cursor 分頁。',
                       {'type': 'object', 'properties': props, 'required': required}, action in ('list', 'status', 'read'))
+        self.specs['codex_send']['description'] += ' 統一傳訊入口：active 交原生排隊；idle 只有非 Compact、上下文 >80k、完成超過30分鐘三者成立才背景壓縮後傳原訊息。快操作直接回執，耗時以 operation_status 唯讀接續。'
+        self.specs['codex_resume']['description'] += ' codex_send 的相容別名，省略 message 時使用預設續跑文字；共用 operation_id 去重。'
 
     def _add(self, name, description, schema, readonly):
         schema['additionalProperties'] = False
@@ -356,7 +359,7 @@ class Bridge:
                     result['prerequisites'] = prerequisites(client, client['risk'])
                 return safe_result(result)
             if name.startswith('codex_'):
-                if name in ('codex_prepare_send', 'codex_confirm_send', 'codex_operation_status'):
+                if name in ('codex_send', 'codex_resume', 'codex_prepare_send', 'codex_confirm_send', 'codex_operation_status', 'codex_delivery_status'):
                     from compact_tools import dispatch
                     return safe_result(dispatch(self, name[6:], arguments))
                 return safe_result(self.codex(name[6:], arguments))
@@ -433,6 +436,8 @@ class Bridge:
         return self.owner + '-computer-' + hashlib.sha256(str(scope or 'internal').encode()).hexdigest()[:32]
 
     def close(self):
+        if self.send_coordinator:
+            self.send_coordinator.close()
         if self.compact_jobs:
             self.compact_jobs.close()
         self.tracking.close()

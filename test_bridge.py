@@ -150,16 +150,25 @@ class BridgeTests(unittest.TestCase):
         calls = []
         def codex(action, args):
             calls.append((action, args))
+            if action == 'status':
+                from test_compact_jobs import snapshot
+                return snapshot(title='Synthetic fixture conversation',thread_state='active')
             return {'deliveryState': 'unknown', 'automaticRetrySafe': False}
         bridge = Bridge(codex=codex)
+        from send_coordinator import SendCoordinator
+        folder=tempfile.TemporaryDirectory()
+        self.addCleanup(folder.cleanup)
+        bridge.send_coordinator=SendCoordinator(codex,root=folder.name)
+        self.addCleanup(bridge.close)
         target = {'thread_id': '11111111-1111-4111-8111-111111111111', 'expected_title': 'Synthetic fixture conversation'}
         for action in ('send', 'resume', 'stop'):
             with self.assertRaises(ValueError):
                 bridge.call('codex_' + action, {'thread_id': target['thread_id'], **({'message': 'test'} if action == 'send' else {})})
         self.assertEqual(calls, [])
         result = bridge.call('codex_send', {**target, 'operation_id': 'literal-test-1', 'message': '$() `x`\n繁體'})
-        self.assertEqual(calls[0][1]['message'], '$() `x`\n繁體')
-        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[1][1]['message'], '$() `x`\n繁體')
+        bridge.call('codex_resume', {**target, 'operation_id':'literal-test-1'})
+        self.assertEqual(len(calls), 2)
         self.assertFalse(result['automaticRetrySafe'])
 
     def test_fresh_native_startup_never_reads_persona_or_connects_network(self):

@@ -171,9 +171,8 @@ async function send(threadId,prompt,options={}){
     const before=await readTarget(client,catalog,threadId,options);
     if(options.expectedBaselineTurnId&&before.turns?.[0]?.id!==options.expectedBaselineTurnId)
       throw fault('TARGET_CHANGED','lookup');
-    if(options.expectedBaselineTurnId&&before.thread.status.type!=='idle')throw fault('TARGET_CHANGED','lookup');
-    const idle=preflight(before);
-    if(idle.required&&!options.skipCompaction)throw fault('COMPACT_CONFIRMATION_REQUIRED','compact');
+    if(options.expectedBaselineTurnId&&before.thread.status.type!==(options.activeBaseline?'active':'idle'))throw fault('TARGET_CHANGED','lookup');
+    preflight(before);
     dispatched=true;
     const r=await appCall(client,catalog,'send_message_to_thread',{threadId,hostId:'local',prompt},requestId,options.callerThreadId);
     return {source:'codex-desktop-live',observedAt:new Date().toISOString(),threadId,requestId,

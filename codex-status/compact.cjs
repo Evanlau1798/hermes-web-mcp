@@ -8,10 +8,7 @@ function preflight(data,now=Date.now()){
     typeof value==='string'&&/^\d{4}-\d\d-\d\dT.*(?:Z|[+-]\d\d:\d\d)$/.test(value)?Date.parse(value):NaN;
   if(!turn?.id||!['completed','interrupted','failed'].includes(turn.status)||!Number.isFinite(completed)||completed<=0||completed>now+5000)
     throw fault('COMPLETION_TIME_UNCONFIRMED','lookup');
-  const compactOnly=turn.status==='completed'&&Array.isArray(turn.items)&&turn.items.length>0&&
-    turn.items.every(item=>item.type==='contextCompaction');
-  return {required:!compactOnly&&now-completed>30*60*1000,baselineTurnId:turn.id,completedAt:value,
-    ...(compactOnly?{reason:'verified-compact-turn-with-no-subsequent-content'}:{})};
+  return {required:false,baselineTurnId:turn.id,completedAt:value};
 }
 function describe(data){
   const turn=data?.turns?.[0],items=turn?.items;

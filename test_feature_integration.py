@@ -10,15 +10,14 @@ class FeatureIntegrationTests(unittest.TestCase):
     def test_compact_dispatch_retains_original_payload_and_status_is_readonly(self):
         bridge = Bridge(codex=Mock())
         self.addCleanup(bridge.close)
-        jobs = bridge.compact_jobs = Mock()
-        jobs.prepare.return_value = {'state': 'awaiting_confirmation'}
+        jobs = bridge.send_coordinator = Mock()
+        jobs.submit.return_value = {'state': 'compacting'}
         jobs.confirm.return_value = {'state': 'compacting'}
         jobs.status.return_value = {'state': 'compacting', 'worker_alive': True}
         args = {'thread_id': '11111111-1111-4111-8111-111111111111',
                 'expected_title': 'Exact title', 'message': '原訊息 English', 'operation_id': 'operation-test'}
         bridge.call('codex_prepare_send', args)
-        jobs.prepare.assert_called_once_with(**args)
-        jobs.confirm.assert_called_once_with('operation-test', 'auto')
+        jobs.submit.assert_called_once_with(**args)
         jobs.confirm.reset_mock()
         bridge.call('codex_confirm_send', {'operation_id': 'operation-test', 'choice': 'compact', 'confirmed_by_user': True})
         jobs.confirm.assert_called_once_with(operation_id='operation-test', choice='compact')

@@ -48,10 +48,9 @@ class AutoCompactTests(unittest.TestCase):
     def test_prepare_automatically_chooses_without_human_compact_confirmation(self):
         from compact_tools import dispatch
         bridge = Mock()
-        bridge.compact_jobs.prepare.return_value = {'state': 'awaiting_confirmation', 'thread_id': THREAD_ID}
         args = dict(thread_id=THREAD_ID, expected_title='Exact title', message='original', operation_id='operation-auto')
         dispatch(bridge, 'prepare_send', args)
-        bridge.compact_jobs.confirm.assert_called_once_with('operation-auto', 'auto')
+        bridge.send_coordinator.submit.assert_called_once_with(**args)
 
     def test_usage_is_current_context_bound_to_latest_turn_not_lifetime_total(self):
         from context_usage import read_context_usage

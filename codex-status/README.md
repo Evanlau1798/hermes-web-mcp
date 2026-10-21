@@ -24,14 +24,23 @@ node .\codex-status\cli.cjs send '<thread UUID>' '.\tmp\message.txt' '<operation
 node .\codex-status\cli.cjs resume '<thread UUID>' '<operation UUID>' '<完整標題>'
 ```
 
-重複 operation_id 只回傳原紀錄，不派送本次內容；回執不保存訊息／標題的明文或內容指紋，故 messageContentVerified=false。不同目標或操作種類共用 ID 時拒絕。unknown 先用 Web 的 codex_delivery_status 或 `codex_adapter.py` 的 JSON stdin 入口（action=delivery_status）查證，不能換 ID 盲目重送。stop 保留原生 user-stop，不殺程序。
+重複 operation_id 只回傳原紀錄，不派送本次內容；回執不保存訊息／標題的明文或內容指紋，故 messageContentVerified=false。不同目標共用 ID 時拒絕；send／resume／prepare_send 共用同一傳訊意圖。unknown 先用 Web 的 codex_delivery_status 或 `codex_adapter.py` 的 JSON stdin 入口（action=delivery_status）查證，不能換 ID 盲目重送。stop 保留原生 user-stop，不殺程序。
 
 `accepted` 只表示受理；`unknown` 不自動重送。內部 IPC 協定不是穩定公開 API，Desktop 更新後先驗證只讀介面，再以另外授權的測試對話驗證控制。
 
-Web Agent 對閒置對話的發訊或續跑意圖優先使用 prepare_send 自動判斷：最新完成 turn 非 Compact、當前上下文 >80000 tokens、最後完成距今 >30 分鐘才先壓縮，不另詢問。operation_status 唯讀等待；內部 compact_start 只派送原生 `thread-follower-compact-thread`，不把 ACK 當完成。status 的 compactState 來自原生 turn items；背景等待新的 compact-only completed turn，再核對 baseline 後傳送原訊息。沒有原子 expected-turn 的 Desktop 協定仍有最後檢查與派送間的競態，請避免其他客戶端同時操作目標。CLI 的底層送訊攔截改走 Web 自動流程，不另要求選擇 Compact。
+Web Agent 傳訊統一使用 codex_send，prepare_send／resume 共用自動判斷：最新完成 turn 非 Compact、當前上下文 >80000 tokens、最後完成距今 >30 分鐘才先壓縮，不另詢問。operation_status 唯讀等待；內部 compact_start 只派送原生 `thread-follower-compact-thread`，不把 ACK 當完成。status 的 compactState 來自原生 turn items；背景等待新的 compact-only completed turn，再核對 baseline 後傳送原訊息。沒有原子 expected-turn 的 Desktop 協定仍有最後檢查與派送間的競態，請避免其他客戶端同時操作目標。CLI 的底層送訊攔截改走 Web 自動流程，不另要求選擇 Compact。
 
 ```powershell
 node --test .\codex-status\test.cjs .\codex-status\test_diagnostics.cjs .\codex-status\test_cli.cjs
 ```
 
 測試只建立暫時管道與合成訊息；不向真實 Desktop 對話發送、續跑或停止。
+
+CLI send／resume 等待同一操作回執才結束，不在等待 Compact 時關閉工作器。Web 耗時工作立即回 operation_id，沿唯讀 operation_status 查詢。CLI 查詢：
+
+```powershell
+node .\codex-status\cli.cjs operation-status '<operation UUID>'
+node .\codex-status\cli.cjs delivery-status '<operation UUID 或 delivery ID>'
+```
+
+公開意圖位於忽略的 runtime/send-intents.sqlite；保留相容讀取舊回執。notLoaded 目前回 BACKGROUND_LOAD_UNAVAILABLE、not-sent，沒有經驗證的同一 Desktop 背景載入介面。此 gate 尚未完成，禁止用前景導航代替。

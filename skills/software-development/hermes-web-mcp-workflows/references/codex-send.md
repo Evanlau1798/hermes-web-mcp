@@ -1,14 +1,15 @@
 # Codex 傳訊
 
-只依人類要求傳訊、續跑或停止確切對話；操作前顯示目標名稱、ID 與訊息。名稱不唯一先釐清；not-sent 不自行換目標。
+只依人類要求傳訊、續跑或停止確切對話。由同筆最新 status/read 逐字核對 thread_id 與完整 expected_title；名稱不唯一先釐清。
 
-逐字核對同一筆查詢的 thread_id 與完整 expected_title；send／resume 使用唯一 operation_id。
-相同操作沿用 operation_id，以 codex_delivery_status 查回執；結果不明不換 ID 重送。
-accepted 表示受理，以 codex_status/read 對照 turnBaseline 查證後續，不將「有新 turn」直接當作此訊息送達的證明。
+推薦 codex_send(thread_id,expected_title,message,operation_id)。prepare_send、resume 是相容入口，共用同一流程與 operation_id 去重；resume 可省略 message 使用預設續跑文字。不要為同步／背景自行切換入口。
 
-傳訊前使用最新完成 turn 的真正 completedAt 判斷 30 分鐘閒置；notLoaded、缺少時間或矛盾狀態都回報未派送。
-使用者要求傳訊後，閒置對話用 codex_prepare_send(thread_id,expected_title,message,operation_id) 啟動自動流程，不額外提醒或詢問是否 Compact。
-最新完成 turn 非 Compact、目前上下文 >80000 tokens 且完成時間距今 >30 分鐘，三者都成立才先壓縮；否則直接傳。用量來自原生 last_token_usage，未知不猜測。閒置對話的發訊或續跑意圖都優先走 prepare_send，不另呼叫 send／resume。
-啟動後以唯讀 codex_operation_status(operation_id) 等背景工作。需要壓縮時，只有新的原生 contextCompaction turn 成功完成，才由背景傳送原訊息；不要另呼叫 codex_send。
-先讀 summary：compact=not_required 表示本次流程跳過壓縮，compact_complete=false 此時不代表仍在等待；delivery=accepted 表示受理。需要後續 turn 狀態時用 codex_operation_status(observe_turn=true)，turn_observation 只證明 baseline 之後有新 turn，不證明由本訊息觸發，也不代表使用者任務已完成。需要獨立送達回執時，再用 delivery_operation_id 查 codex_delivery_status。逾時、狀態不明、其他 turn 介入或 MCP 重啟均不自動重送；重新檢查並由人類重新要求傳訊。
-查詢失敗依 stage/errorCode/requestId/suggestedAction 排錯，不以舊資料庫快照或 generic exception 推論 idle。
+active 直接交 Desktop 原生傳訊及排隊，不先 Compact 或停止。idle 只有最新完成 turn 非 Compact、目前上下文 >80000 tokens 且完成時間距今 >30 分鐘三者成立才先壓縮；否則直接傳。不額外詢問是否壓縮。用量未知不猜測；baseline 或狀態不可靠回報未派送。
+
+notLoaded 需要同一 Desktop 的背景載入介面；目前目錄沒有已驗證能力，回 BACKGROUND_LOAD_UNAVAILABLE、not-sent。不要切換前景頁、另啟 app-server 或替代對話。
+
+先讀匹配本次目標與 operation_id 的最新回執 summary.delivery。accepted 只表示受理；耗時工作沿 codex_operation_status(operation_id) 唯讀等待，必要時 observe_turn=true。新 turn 只證明較 baseline 新，不保證由此訊息觸發，也不等於任務完成。需要 Compact 時確認新的原生 contextCompaction turn 完成後才由背景傳原訊息，不另呼叫 send。
+
+codex_delivery_status 同時接受公開 operation_id 與回傳的 delivery_operation_id。重複 ID 只回原紀錄，messageContentVerified=false；不同訊息不可因結果不明換 ID 重送。前一次拒絕、後一次新操作受理是不同紀錄，不能用舊拒絕結果覆蓋新回執。MCP 重啟不恢復 RAM 中訊息；結果不明先 status/read 查證，保留原 ID。
+
+依 errorCode/stage/requestId 排錯；不同來源紀錄衝突不猜測。不要以舊資料庫快照推論 idle。手動 confirm_send 僅依人類明確選擇，保留原核准聲明。

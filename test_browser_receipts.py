@@ -10,6 +10,18 @@ import runtime
 
 
 class BrowserReceiptTests(unittest.TestCase):
+    def test_evicted_native_buffer_is_never_reported_as_complete_history(self):
+        import threading
+        from types import SimpleNamespace
+        adapter=BrowserAdapter()
+        adapter.sessions['owned']={}
+        session=SimpleNamespace(_lock=threading.Lock(),total_output_chars=250000,output_buffer='x'*200000)
+        with patch('backend.process_registry.get',return_value=session):
+            result=adapter.collect('owned',{'status':'exited','output':'kept text','exit_code':0})
+        self.assertEqual(result.payload['output_history']['evicted_raw_chars'],50000)
+        self.assertTrue(result.payload['partial_output'])
+        self.assertFalse(result.payload['output_history']['complete_history_available'])
+
     def test_long_line_continuation_eventually_moves_to_next_line_batch_and_stops(self):
         from process_output import page_log
         from browser_output import format_result

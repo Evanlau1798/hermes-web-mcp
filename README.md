@@ -103,13 +103,15 @@ capture 的 mode=som 回傳畫面與元素編號，mode=vision 回傳畫面，mo
 
 傳訊 receipt 的 accepted 表示受理。依 turnBaseline 與 followUp，先確認新訊息／對應 turn 已出現，再以 codex_status 追蹤；完成時核對該 turn 的 completed 狀態。需要內容時再呼叫 codex_read。
 
-send／resume 必填 `operation_id`，例如本次產生的 UUID。相同操作沿用同一 ID；即使連線中斷或 MCP 重啟，也只查回既有紀錄，不再派送。以 `codex_delivery_status` 查閱回執；unknown 時核對 status/read 與 turnBaseline，不能改 ID 盲目重送。只有新的人類操作才使用新 ID。重複 ID 不比對或保存訊息／標題內容指紋，只回傳原紀錄並標記 messageContentVerified=false，本次內容不派送。送達紀錄存於忽略的 `runtime/codex-delivery.sqlite`，不保存訊息或標題。
+send／resume 必填 `operation_id`，例如本次產生的 UUID。相同操作沿用同一 ID；即使連線中斷或 MCP 重啟，也只查回既有紀錄，不再派送。以 `codex_delivery_status` 查閱回執；unknown 時核對 status/read 與 turnBaseline，不能改 ID 盲目重送。只有新的人類操作才使用新 ID。重複 ID 不比對或保存訊息／標題內容指紋，只回傳原紀錄並標記 messageContentVerified=false，本次內容不派送。公開意圖存於忽略的 `runtime/send-intents.sqlite`，相容讀取 `codex-delivery.sqlite` 與 `compact-jobs.sqlite`；不保存訊息、標題或內容指紋。不同來源衝突回 RECEIPT_CONFLICT。
 
-使用者要求傳訊後，Web Agent 對閒置對話以 `codex_prepare_send(thread_id, expected_title, message, operation_id)` 啟動自動流程。最新已完成 turn 不是原生 Compact、目前上下文嚴格大於 80,000 tokens，且最後完成時間距今嚴格超過 30 分鐘時，先原生 Compact，再傳原訊息。不額外提醒或詢問是否壓縮；未滿足全部條件則直接傳送。
+使用者要求傳訊後，Web Agent 統一以 `codex_send(thread_id, expected_title, message, operation_id)` 啟動流程，prepare_send／resume 共用此入口與去重；active 直接交原生排隊，idle 自動判斷。最新已完成 turn 不是原生 Compact、目前上下文嚴格大於 80,000 tokens，且最後完成時間距今嚴格超過 30 分鐘時，先原生 Compact，再傳原訊息。不額外提醒或詢問是否壓縮；未滿足全部條件則直接傳送。
 
 `contextUsage.contextTokens` 取自本機原生用量紀錄中，與最新 turn ID 相符的 `last_token_usage.total_tokens`，不是歷史累計 `total_token_usage`。查詢僅讀取有界的紀錄尾段，對外不回傳對話內容。讀不到、紀錄不完整或 turn 不符時回傳 null，不猜測、不自動壓縮。`codex_confirm_send` 保留給人類明確指定的手動操作，相容既有客戶端。
 
-啟動後立即回傳背景操作回執，使用唯讀 `codex_operation_status(operation_id)` 等待。受理不代表壓縮完成；背景只在新的原生 contextCompaction turn 成功完成、前一個 turn 正是準備階段的 baseline、目標仍閒置時，才傳送 RAM 中保存的原訊息。最後的 delivery receipt 仍以 accepted／unknown 等實際狀態解讀，用回傳的獨立 `delivery_operation_id` 查 `codex_delivery_status`，不另行 send。重複呼叫與查詢不重送；MCP 重啟不恢復尚未傳送的訊息，需重新檢查並由人類重新要求傳訊。
+快速投遞直接回執；耗時流程回傳操作 ID，使用唯讀 `codex_operation_status(operation_id)` 等待。受理不代表壓縮完成；背景只在新的原生 contextCompaction turn 成功完成、前一個 turn 正是準備階段的 baseline、目標仍閒置時，才傳送 RAM 中保存的原訊息。最後的 delivery receipt 仍以 accepted／unknown 等實際狀態解讀，用回傳的獨立 `delivery_operation_id` 查 `codex_delivery_status`，不另行 send。重複呼叫與查詢不重送；MCP 重啟不恢復尚未傳送的訊息，需重新檢查並由人類重新要求傳訊。
+
+notLoaded 目前回 BACKGROUND_LOAD_UNAVAILABLE、not-sent：目前 Desktop 工具目錄沒有可驗證的背景載入介面，不切換前景頁面或另啟 app-server。F10 背景載入仍未完成。GPT Live／語音另待驗證，不宣稱相容。
 
 active session 保留正常傳訊行為。原生 Compact 派送前核對兩次 idle 與 baseline；Desktop 協定沒有原子 expected-turn 條件，無法保證其他客戶端不在兩次檢查後介入。不要同時操作同一目標。狀態不明、介入或逾時時不傳送原訊息。
 

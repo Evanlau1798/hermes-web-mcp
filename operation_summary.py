@@ -30,3 +30,28 @@ def observe_turn(api, row):
                 'correlation': 'newer_than_baseline_only'}
     except Exception:
         return {'state': 'unknown', 'errorCode': 'OBSERVATION_FAILED'}
+
+
+def compact_receipt(row, worker_alive=False):
+    complete = bool(row['compact_complete'])
+    compact_state = {'turnId': row['compact_turn_id'] if complete else row['baseline_compact_turn_id'],
+                     'completedAt': row['compact_completed_at'] if complete else row['baseline_compact_completed_at'],
+                     'lastTurnIsCompaction': complete or bool(row['baseline_compacted']),
+                     'nativeCompactionItemSeen': True if complete else row['baseline_native_compaction_item_seen']}
+    return {'ok': row['state'] not in ('rejected', 'canceled', 'interrupted', 'compaction_failed',
+                                       'compaction_unknown', 'compaction_timeout', 'delivery_unknown',
+                                       'delivery_not_sent', 'delivery_failed'),
+            'operation_id': row['operation_id'], 'thread_id': row['thread_id'],
+            'delivery_operation_id': row['delivery_operation_id'],
+            'baseline_turn_id': row['baseline_turn_id'], 'compact_turn_id': row['compact_turn_id'],
+            'baseline_completed_at': row['baseline_completed_at'],
+            'baseline_compacted': bool(row['baseline_compacted']), 'compactState': compact_state,
+            'state': row['state'], 'worker_alive': worker_alive,
+            'compact_complete': bool(row['compact_complete']), 'delivery_state': row['delivery_state'],
+            'reconfirmation_required': row['state'] == 'interrupted',
+            'errorCode': row['error_code'], 'created_at': row['created_at'],
+            'updated_at': row['updated_at'], 'confirmed_at': row['confirmed_at'],
+            'compact_started_at': row['compact_started_at'],
+            'summary': summarize(row), 'compact_completed_at': row['compact_completed_at'],
+            'delivery_started_at': row['delivery_started_at'],
+            'delivery_completed_at': row['delivery_completed_at']}
