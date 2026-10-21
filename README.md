@@ -10,7 +10,7 @@ Hermes MCP 預設供 ChatGPT Web 使用。Web 對話涉及 Hermes、Codex 或 Wi
 {"cwd":"C:/Example/Project","task":"修復 Windows 命令結果的判讀"}
 ```
 
-以上是合成路徑範例；cwd 改成實際專案的絕對路徑。`hermes_context` 的 task 必填；未填 cwd 時使用 MCP repo 目錄，回執會列出實際目錄。先讀 harness.steps，再讀 prerequisites.pending；完整技能目錄由 skills_list 分頁展開，完整工具 schema 使用 MCP tools/list。
+以上是合成路徑範例；cwd 改成實際專案的絕對路徑。`hermes_context` 的 task 必填；未填 cwd 時使用 MCP repo 目錄，回執會列出實際目錄。先讀 harness.steps，再讀 prerequisites.pending；workflow 的 SKILL.md 是核心與主題索引，只讀本次操作對應的 references。context 各領域的 guide 是 hermes_skill_read 參數，不需預讀其他領域；完整技能目錄由 skills_list 分頁展開，完整工具 schema 使用 MCP tools/list。
 
 初始化回傳 `bootstrap.bootstrap_id`。後續每個 MCP 工具都帶同一個 `bootstrap_id`；切換任務或 cwd 時，以舊 ID 呼叫 `hermes_context(cwd,task,bootstrap_id)`，改用回傳的新 ID。舊 ID 隨即失效，技能／規範閱讀狀態重新計算，已啟動的背景工作不會因此被停止。更換 MCP 程序後重新初始化，沿原操作回執查證，不重送結果不明的寫入。
 
@@ -33,7 +33,7 @@ Hermes MCP 預設供 ChatGPT Web 使用。Web 對話涉及 Hermes、Codex 或 Wi
 
 ### 主動學習
 
-`hermes_context.skill_updates.learning` 提供依 Hermes harness 整理的學習指引。Web Agent 在收到人類對風格／流程的修正、找到已驗證可重用的解法，或發現已載入技能錯誤／過時時主動判斷更新，並在完成任務前再檢查一次。依序優先更新本次載入的 Hermes 技能、既有類別技能、主題支援檔；都不適用才建立類別技能。沒有新規則或已有等價內容就不製造寫入。
+`hermes_context.skill_updates.learning` 提供學習訊號，`skill_updates.guide` 指向按需讀取的完整維護規則。Web Agent 在收到人類對風格／流程的修正、找到已驗證可重用的解法，或發現已載入技能錯誤／過時時主動判斷更新，並在完成任務前再檢查一次。依序優先更新本次載入的 Hermes 技能、既有類別技能、主題支援檔；都不適用才建立類別技能。沒有新規則或已有等價內容就不製造寫入。
 
 更新前重新完整讀取確切目標，搜尋去重，再以 `hermes_skill_manage` 精確 patch，成功後讀回核對。常用偏好放 SKILL.md，主題細節放 references 並補上入口；只提煉規則與原因，不保存整段對話、秘密、臨時故障或未驗證嘗試。自動學習不刪除技能，也不自動上傳本機技能。原生驗證、lint、回滾與核准機制照常生效；等待批准或結果不明時如實回報，不繞過防護或盲目重送。
 
@@ -73,7 +73,7 @@ output 保留原生合併輸出，stdout 提供同值別名，streams_merged=tru
 
 網站操作另用單一 `browser_use`（顯示名稱 **browser use**），沿用同一 MCP／Tunnel。先 `{"action":"guide"}` 讀本機 Ego 官方指南，再 `{"action":"run","code":"..."}` 執行 JavaScript；同一任務沿用一個 TaskSpace ID。Ego 每次執行都是新 Node.js 程序，JS 變數不保留。截圖用 `await page.screenshot({path: browserScreenshotPath})`，MCP 直接回傳 PNG。長工作以回執 `session_id` 使用既有 process_read 查詢，結束時回傳截圖；原生命令防護與程序所有權照常保留，結果不明不重送。此官方 JS runtime 具本機 Node.js 能力，並非瀏覽器沙箱。
 
-網站操作依任務條件有界等待目標內容，不能只以 URL 或 load 判定就緒。逾時先查原程序與原分頁目前狀態，已達成就接續，仍載入則在總預算內等待；不盲目重播結果不明的動作。資料擷取逐欄核對同一主實體的來源，排除引用／回覆混入作者、時間或正文；來源矛盾標記未確認。完整流程見 [browser use 技能](skills/software-development/hermes-web-mcp-workflows/SKILL.md#瀏覽器-browser-use)，採跨網站規則，不保存特定網站 DOM。
+網站操作依任務條件有界等待目標內容，不能只以 URL 或 load 判定就緒。逾時先查原程序與原分頁目前狀態，已達成就接續，仍載入則在總預算內等待；不盲目重播結果不明的動作。資料擷取逐欄核對同一主實體的來源，排除引用／回覆混入作者、時間或正文；來源矛盾標記未確認。完整流程見 [browser use 技能](skills/software-development/hermes-web-mcp-workflows/references/browser.md)，採跨網站規則，不保存特定網站 DOM。
 
 Web 截圖顯示使用 [MCP 圖片範例](skills/software-development/hermes-web-mcp-workflows/references/mcp-images.md)：保留完整回傳，在同一次宿主執行取 `content_items`（或標準 `content` 陣列）的原生圖片，呼叫圖片 helper 並核對；之後再結束 TaskSpace。`structuredContent`／JSON 文字只含狀態，圖片不在文字日誌中；`image_count=1` 不代表已顯示。不新增圖片快取或讀檔接口。
 

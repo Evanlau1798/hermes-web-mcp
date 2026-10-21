@@ -130,7 +130,7 @@ Invoke-WebRequest "$healthUrl/readyz" -TimeoutSec 10
 
 外掛簡介：
 
-> Hermes MCP 預設供 ChatGPT Web 使用。Web 端涉及 Hermes、Codex、Windows 本機或網站操作時，先呼叫 hermes_context 取得導引與技能清單，按需完整讀取技能。網站任務使用單一 browser_use：guide 讀 Ego 官方指南，再 run 執行 JavaScript；同一任務沿用 TaskSpace ID，長工作以 hermes_process_read 查詢。其他任務使用檔案、PowerShell、程序、電腦操作、Codex 對話及共用記憶工具。閒置傳訊使用 codex_prepare_send，依 context 的三條件自動判斷是否 Compact，再以 codex_operation_status 等待；不另詢問。本機原生 Codex 使用自己的工具，只有人類使用者明確要求時才調用 Hermes 整合。
+> Hermes Harness 是 ChatGPT Web 的本機工具框架。處理 Hermes、Codex、Windows 或網站任務時，先 hermes_context(cwd,task)，依 harness.steps 與 prerequisites.pending 完成閱讀，後續帶回 bootstrap_id；換任務或 cwd 重新初始化。按 context 各主題 guide 與 workflow 技能索引，只讀本次適用 references。網站用 browser_use：完整讀目前版本官方 guide，再 run；截圖前讀 mcp-images 範例。長工作沿 session_id 查 hermes_process_read。修正與已驗證解法依 skill_updates.guide 維護技能。本機原生 Codex 使用自己的工具，僅依人類明確要求調用 Hermes。
 
 新增工具後若 context 已顯示 browser_use，但 Web 無法發現可呼叫的工具，到現有 Hermes 外掛的 Manage → Refresh tools 同步目錄，核對只新增 browser_use，再開獨立 Web 對話驗證；沿用原有連線與權限。
 
@@ -175,6 +175,6 @@ node --test test_codex_input.cjs codex-status/test.cjs codex-status/test_diagnos
 
 更新 browser use 導引後，將 repo 的 hermes-web-mcp-workflows 技能經原生 skill_manage 精確更新至本機並讀回核對，再重載專用 MCP。工具描述快取仍舊時在現有外掛 Refresh tools；不另建連線或修改權限。獨立 Web 驗證使用可丟棄、跨網站概念的測試頁：延遲主內容、導航已生效但 load 逾時、引用／回覆先於主欄位。確認有界等待、同 Space 恢復、未重送動作，以及主實體欄位來源正確；結束釋放 Space，移除暫存測試服務。成功瀏覽不等同所有擷取欄位正確，逐項保留回執證據。
 
-同步技能時一併用 skill_manage write_file 安裝 `references/mcp-images.md`，讀回核對。圖片驗收先取得截圖回傳並在同一次 Web 宿主執行顯示，實際讀圖後才另呼叫 finish；同時檢查原生圖片區塊、helper 執行與可見結果。只產生路徑／image_count 或只在本機 stdio 測通，均不能代替 Web 視覺驗收。不以文字結果、公開 URL、額外端點或取消原防護繞過圖片通道。
+同步技能時以 skill_manage 精確 patch 核心 SKILL.md，並安裝或更新其連結的全部 references（browser、mcp-images、processes、codex-send、tracking、skill-learning），逐份讀回與 repo 核對。context 的 guide 僅是 hermes_skill_read 參數；Web Agent 依本次操作載入，切換任務重新 bootstrap。官方 Ego guide 仍須完整讀取至結尾，不以摘要取代。圖片驗收先取得截圖回傳並在同一次 Web 宿主執行顯示，實際讀圖後才另呼叫 finish；同時檢查原生圖片區塊、helper 執行與可見結果。只產生路徑／image_count 或只在本機 stdio 測通，均不能代替 Web 視覺驗收。不以文字結果、公開 URL、額外端點或取消原防護繞過圖片通道。
 
 本次 source 更新需在適當時機重載專用 Tunnel 才會套用；此文件不代表授權自動重載。搬移後另外更新忽略的 profile 中 Python／server 路徑及本機 Startup entry。私人資料如需搬移，使用另外的離線備份，禁止加入 Git。CLI／Gateway 可依固定官方版本重新 setup，登入入口保留 Scheduled Task／Startup fallback 其中一種避免重複。

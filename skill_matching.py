@@ -58,9 +58,7 @@ def workflow(task, rows):
     return {
         'task': task, 'risk': risks,
         'required_skill_ids': [rows[0]['id']] if risks and rows else [],
-        'steps': ['先讀首選專用 SKILL.md 到 eof，再按內容讀必要 references；通用開發技能作補充。',
-                  '確認專案 AGENTS.md、來源／目標、branch、dirty files、授權與既有證據。',
-                  '依專用流程操作；結果不明先查證，保留原回執再決定下一步。'],
+        'steps': ['依 prerequisites 先完成規範／技能閱讀，再按適用技能執行及核對回執。'],
         'next_step': ({'tool': 'hermes_skill_read', 'skill_id': rows[0]['id']} if rows else
                       {'tool': 'hermes_skills_list', 'query': task or '填入本次具體任務'}),
     }

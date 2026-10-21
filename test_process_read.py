@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import runtime
 import mcp_types as types
-from backend import Bridge, INSTRUCTIONS
+from backend import Bridge
 
 
 class ProcessReadTests(unittest.TestCase):
@@ -25,7 +25,11 @@ class ProcessReadTests(unittest.TestCase):
         context = self.bridge.call('hermes_context', {})
         self.assertTrue(context['tools']['hermes_process_read']['read_only'])
         self.assertEqual(context['processes']['read'], 'hermes_process_read')
-        self.assertIn('hermes_process_read', INSTRUCTIONS)
+        import discovery
+        with patch.object(discovery, 'SKILLS_ROOT', runtime.ROOT/'skills'):
+            guide = discovery.skill_read(**context['processes']['guide'])
+        self.assertTrue(guide['eof'])
+        self.assertIn('hermes_process_read', guide['content'])
 
     def test_bootstrap_owner_fence_and_dispatch(self):
         args = {'action': 'poll', 'session_id': 'owned'}
