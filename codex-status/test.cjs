@@ -258,7 +258,8 @@ test('CLI preserves UTF-8 file text and resume uses an explicit continuation pro
   await main(['send',ID,file,'cli-test-1','exact title'],api,deliver);
   assert.equal(calls[0][1].message,'繁體中文\nKeep $() literal');
   await main(['resume',ID,'cli-test-2','exact title'],api,deliver);assert.equal(calls[1][0],'resume');
-  assert.deepEqual(await main(['stop',ID],api),{id:ID});
+  assert.deepEqual(await main(['stop',ID],api,async action=>action==='status'?
+    {thread:{id:ID,title:'exact title'}}:{id:ID}),{id:ID});
   await assert.rejects(main(['send',ID],api),/Usage/);
   await assert.rejects(main(['status',ID,'extra'],api),/Usage/);
   fs.writeFileSync(file,Buffer.alloc(65537));

@@ -1,8 +1,10 @@
-# Codex Desktop 橋接
+# Codex Desktop／daemon 橋接
 
 `bridge.cjs`、`cli.cjs`、`test.cjs` 均在此儲存庫內。橋接使用 PATH 上的 Node 標準庫，不需要 npm install，不讀取帳號憑證。Web 的 Python adapter 另從本機原生紀錄尾段讀取當前 turn 用量，僅對外回傳 token 數，不回傳對話內容。以下命令在 repo 根目錄執行。
 
 App Tools 查詢及 send，與 IPC owner 路由的 stop 保留原本的參數驗證、名稱核對、逾時、部分成功及結果不明語意。sub-agent 使用相同 read/status。每次重新探索唯一管道，Desktop 需開啟並登入。
+
+Web 與 CLI 的 status/read/send/resume/stop 共用 Python 後端路由；list 保留 Desktop 快照。Desktop 已持有的對話沿原路徑；既有 daemon 持有或可冷載入的對話使用官方 app-server proxy 的 WebSocket RPC。設定 HERMES_MCP_CODEX 為 codex.exe 的絕對路徑，或使用 PATH／官方 npm 套件。未部署 daemon 就明確回不可用，不另啟服務。status/read 不載入對話，僅傳訊可背景載入原 ID。sub-agent 仍使用相同讀取工具。
 
 list 的公開 limit 上限仍為 100；送入 Desktop 的 limit 依其 tools/list schema 上限裁切，缺少宣告時使用 50。pagination.mode=bounded-snapshot、nativeLimit、accessibleCount、snapshotTruncated 說明實際可讀快照。Desktop 無 cursor：nextOffset 只指向這個快照可及的範圍；hasMore=null 表示更深資料未知，超出可及快照回 NATIVE_PAGINATION_LIMIT，不誤報沒有對話。automaticRetrySafe 只表示唯讀重試無寫入副作用；retryable 才表示可嘗試原參數的暫態重試。已知 ID 優先 status，參數／深頁限制需調整查詢，不無限重試。
 
@@ -43,4 +45,4 @@ node .\codex-status\cli.cjs operation-status '<operation UUID>'
 node .\codex-status\cli.cjs delivery-status '<operation UUID 或 delivery ID>'
 ```
 
-公開意圖位於忽略的 runtime/send-intents.sqlite；保留相容讀取舊回執。notLoaded 目前回 BACKGROUND_LOAD_UNAVAILABLE、not-sent，沒有經驗證的同一 Desktop 背景載入介面。此 gate 尚未完成，禁止用前景導航代替。
+公開意圖位於忽略的 runtime/send-intents.sqlite；保留相容讀取舊回執。execution_backend／backend_instance_id 固定操作所用後端與實例；daemon 受理另有 native_turn_id。原生 Compact 完成後才送訊，結果不明不跨後端重送。MCP 不保存可重播訊息；daemon 保留閒置 writer 時 Desktop 仍可能顯示 notLoaded，不以刪鎖或前景導航處理。

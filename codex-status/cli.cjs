@@ -29,8 +29,13 @@ function messageFile(path){
 }
 async function main(args,api=bridge,deliver=persistentCall){
   const [command,id,file]=args;
-  if((command==='list'&&args.length===1)||(['status','read'].includes(command)&&args.length===2))return api.query(command,id);
-  if(command==='stop'&&args.length===2)return api.stop(id);
+  if(command==='list'&&args.length===1)return api.query(command,id);
+  if(['status','read'].includes(command)&&args.length===2)return deliver(command,{thread_id:id});
+  if(command==='stop'&&args.length===2){
+    const before=await deliver('status',{thread_id:id});
+    if(before.errorCode||before.thread?.id!==id||!before.thread.title)return before;
+    return deliver('stop',{thread_id:id,expected_title:before.thread.title});
+  }
   if(['operation-status','delivery-status'].includes(command)&&args.length===2)
     return deliver(command.replace('-','_'),{operation_id:id});
   if(command==='send'&&args.length===5)return deliver('send',{

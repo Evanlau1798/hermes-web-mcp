@@ -6,7 +6,7 @@ import time
 import uuid
 from pathlib import Path
 from compact_jobs import CompactJobs
-from send_receipts import SendReceipts, error, normalize
+from send_receipts import SendReceipts, error, normalize, owner_identity, owner_alive
 from operation_summary import observe_turn
 
 
@@ -20,6 +20,8 @@ class SendCoordinator:
         self.store=SendReceipts(self.root)
         self.jobs=jobs
         self.lock=threading.RLock()
+        self.loading={}
+        self.closed=False
 
     def _jobs(self):
         if self.jobs is None:
@@ -40,22 +42,32 @@ class SendCoordinator:
                     result=self.jobs.status(operation_id,observe_turn=observe_turn)
                 else:
                     result=legacy or intent
-                    if result.get('state') in CompactJobs.ACTIVE and intent.get('owner_pid'):
-                        import psutil
-                        if not psutil.pid_exists(intent['owner_pid']):
+                    if result.get('state') in (*CompactJobs.ACTIVE,'preparing') and intent.get('owner_pid'):
+                        if owner_alive(intent) is False:
                             result.update(state='interrupted',errorCode='PROCESS_RESTARTED',worker_alive=False,
                                 delivery_state='unknown' if result.get('delivery_started_at') else 'not-sent')
-                            result['summary']['delivery']=result['delivery_state']
+                            result.setdefault('summary',{})['delivery']=result['delivery_state']
                     if observe_turn and legacy:
                         result['turn_observation']=observe_turn_fn(self.api,intent['thread_id'],
-                            {'id':result.get('compact_turn_id') or result.get('baseline_turn_id')})
+                            {'id':result.get('compact_turn_id') or result.get('baseline_turn_id')},result)
                 return normalize(result,operation_id,intent['thread_id'])
             if intent:
                 if legacy: return error('RECEIPT_CONFLICT',operation_id,intent['thread_id'])
                 result=normalize(intent,operation_id)
+                if result.get('route')=='active' and result.get('state')=='sending' and owner_alive(intent) is False:
+                    result.update(state='delivery_unknown',errorCode='PROCESS_RESTARTED',deliveryState='unknown',
+                                  delivery_state='unknown',summary={'delivery':'unknown'})
                 if observe_turn and result.get('turnBaseline'):
                     baseline=result['turnBaseline']
-                    result['turn_observation']=observe_turn_fn(self.api,result['thread_id'],baseline)
+                    result['turn_observation']=observe_turn_fn(self.api,result['thread_id'],baseline,result)
+                if result.get('state')=='loading':
+                    worker=self.loading.get(operation_id)
+                    result['worker_alive']=bool(worker and worker.is_alive())
+                    if not result['worker_alive'] and owner_alive(intent) is False:
+                        result.update(state='interrupted',errorCode='PROCESS_RESTARTED',deliveryState='not-sent',
+                                      delivery_state='not-sent',summary={'delivery':'not-sent'})
+                    elif not result['worker_alive']:
+                        result.update(worker_alive=None,owner_alive=owner_alive(intent))
                 return result
             if legacy: return normalize(legacy,legacy.get('operation_id',operation_id))
             return error('OPERATION_NOT_FOUND',operation_id)
@@ -105,38 +117,56 @@ class SendCoordinator:
         if thread.get('id')!=thread_id: return error('THREAD_ID_MISMATCH',operation_id,thread_id)
         if thread.get('title')!=title: return error('THREAD_TITLE_MISMATCH',operation_id,thread_id)
         if state=='notLoaded':
-            # Current Desktop catalog has no verified background-load capability.
+            if hasattr(type(self.api),'ensure_loaded'):
+                from send_loading import start_load
+                binding=data.get('load_binding')
+                if not binding: return error('BACKGROUND_LOAD_UNAVAILABLE',operation_id,thread_id)
+                return start_load(self,thread_id,title,message,operation_id,binding)
             return error('BACKGROUND_LOAD_UNAVAILABLE',operation_id,thread_id)
+        return self._submit_loaded(data,thread_id,title,message,operation_id)
+
+    def _submit_loaded(self,data,thread_id,title,message,operation_id):
+        thread=data.get('thread') or {}
+        if thread.get('id')!=thread_id or thread.get('title')!=title:
+            return error('TARGET_LOOKUP_FAILED',operation_id,thread_id)
+        state=(thread.get('status') or {}).get('type')
+        binding={k:data[k] for k in ('execution_backend','backend_instance_id') if data.get(k)}
         if state=='active':
             turn=data.get('latestTurn') or {}
             if not isinstance(turn.get('id'),str) or not turn['id'] or len(turn['id'])>256:
                 return error('SNAPSHOT_INVALID',operation_id,thread_id)
             args=dict(thread_id=thread_id,expected_title=title,message=message,
                       operation_id='send-delivery-'+uuid.uuid4().hex,active_baseline=True,
-                      expected_baseline_turn_id=turn['id'])
+                      expected_baseline_turn_id=turn['id'],**binding)
             self.store.save({**self.store.get(operation_id),'route':'active','state':'sending',
-                             'delivery_operation_id':args['operation_id'],'turnBaseline':{
+                             'deliveryState':'unknown','delivery_state':'unknown','summary':{'delivery':'unknown'},
+                             'delivery_operation_id':args['operation_id'],**binding,**owner_identity(),'turnBaseline':{
                                  key:turn[key] for key in ('id','status','startedAt','completedAt') if key in turn}})
             result=self.api('send',args)
             if result.get('deduplicated'):
                 result={**result,'deliveryState':'unknown','errorCode':'DELIVERY_ID_REUSED'}
             # Do not retain native receipt text/title; the adapter holds its own safe receipt.
-            return {**{k:v for k,v in result.items() if k in ('deliveryState','errorCode','requestId','turnBaseline','error')},
+            return {**binding,**{k:v for k,v in result.items() if k in ('deliveryState','errorCode','requestId','turnBaseline','error','native_turn_id')},
                     'route':'active','delivery_operation_id':args['operation_id']}
         if state!='idle': return error('THREAD_STATE_UNCONFIRMED',operation_id,thread_id)
         jobs=self._jobs()
-        result=jobs.prepare(thread_id,title,message,operation_id)
+        # Publish the shared job route before its row becomes visible to other clients.
+        self.store.save({**self.store.get(operation_id),**binding,'route':'idle','state':'preparing',
+                         'deliveryState':'not_started','delivery_state':'not_started',
+                         'summary':{'delivery':'not_started'},**owner_identity()})
+        result=jobs.prepare(thread_id,title,message,operation_id,**binding)
         if result.get('state')=='awaiting_confirmation': result=jobs.confirm(operation_id,'auto')
-        return {**result,'route':'idle','owner_pid':os.getpid()}
+        return {**result,'route':'idle',**owner_identity()}
 
     def confirm(self,operation_id,choice):
         result=self._jobs().confirm(operation_id,choice)
         return normalize(result,operation_id)
 
     def close(self):
+        self.closed=True
         if self.jobs: return self.jobs.close()
 
 
-def observe_turn_fn(api,thread_id,baseline):
-    return observe_turn(api,{'thread_id':thread_id,'baseline_turn_id':baseline.get('id'),
+def observe_turn_fn(api,thread_id,baseline,binding=None):
+    return observe_turn(api,{**(binding or {}),'thread_id':thread_id,'baseline_turn_id':baseline.get('id'),
                              'compact_complete':False,'compact_turn_id':None})

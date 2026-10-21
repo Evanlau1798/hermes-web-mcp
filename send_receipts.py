@@ -2,9 +2,27 @@
 import json
 import sqlite3
 import time
+import os
+import psutil
 from contextlib import contextmanager
 from pathlib import Path
 from operation_summary import compact_receipt
+
+
+def owner_identity():
+    return {'owner_pid':os.getpid(),'owner_started_at':psutil.Process(os.getpid()).create_time()}
+
+
+def owner_alive(row):
+    if not row.get('owner_pid'):
+        return None
+    try:
+        created=psutil.Process(row['owner_pid']).create_time()
+        return abs(created-row['owner_started_at'])<.01 if row.get('owner_started_at') else None
+    except psutil.NoSuchProcess:
+        return False
+    except (psutil.Error,ValueError,TypeError):
+        return None
 
 
 def error(code, operation_id=None, thread_id=None):
@@ -77,7 +95,8 @@ class SendReceipts:
     def save(self,result):
         # A whitelist prevents native text, titles or prompts entering this ledger.
         keys=('operation_id','thread_id','delivery_operation_id','state','deliveryState','delivery_state','summary',
-              'errorCode','created_at','updated_at','requestId','turnBaseline','route','owner_pid')
+              'errorCode','created_at','updated_at','requestId','turnBaseline','route','owner_pid',
+              'execution_backend','backend_instance_id','native_turn_id','owner_started_at')
         public={k:v for k,v in result.items() if k in keys}
         with self.db() as db:
             db.execute('UPDATE intents SET result=? WHERE id=?',(json.dumps(public),result['operation_id']))

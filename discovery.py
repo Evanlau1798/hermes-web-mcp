@@ -178,7 +178,7 @@ def context(specs, cwd=None, task=''):
             'tracking': {'control': 'hermes_tracking', 'read': 'hermes_tracking_status',
                          'guide': guide('tracking')},
             'codex_delivery': {'send':'codex_send','receipt': 'codex_delivery_status', 'status':'codex_operation_status','operation_id_required': True,
-                               'background_load':'unavailable_in_current_desktop_catalog',
+                               'background_load':'existing_daemon_exact_thread_id',
                                'guide': guide('codex-send')},
             'browser_use': {'tool': 'browser_use', 'guide': guide('browser')},
             'computer_use': {'exposed': True, 'tool': 'hermes_computer_use',

@@ -93,6 +93,12 @@ notepad (Join-Path $runtime 'codex-context.json')
 
 將 placeholder 換成本機 UUID。它只是路由背景，不是 Web session 或預設操作目標。入口驗證 JSON／UUID，缺檔或格式錯誤回 `CODEX_CONTEXT_REQUIRED`／`not-sent`，不找舊 bridge。格式正確不代表目標存在或閒置，部署者需在已知閒置對話驗證只讀 list/status；失敗不換 ID 或重送寫入。CLI 設定見 `codex-status/README.md`。
 
+背景接續另需已存在且可連線的官方 Codex daemon，以及支援 `app-server proxy` 的 CLI。設定 `HERMES_MCP_CODEX` 為原生 codex.exe 的絕對路徑，或讓 PATH／官方 npm 套件提供該執行檔；不使用 shell shim 執行訊息。`CODEX_HOME` 未設定時使用目前帳號預設位置。launcher 會轉交這兩項非金鑰設定，不自動啟動、更新或重啟 daemon。Python 使用既有 Hermes 依賴環境中的 websockets、psutil，不另安裝模型或服務。
+
+Desktop 已載入的對話沿原路徑；daemon 持有的對話向 daemon 查詢及控制。兩端皆未載入時，只有傳訊入口可原生 resume 同一 ID，從保留的設定核對模型、cwd 與權限，接回同一 Compact／傳訊工作器。兩端持有衝突、配置不明或實例變更回明確錯誤。同一 operation 不跨後端重試，訊息不寫入磁碟。原生核准／宿主工具請求沒有可用通道時回阻擋，不自動批准；stop 部分成功需看 stopConfirmed 與 goalPauseConfirmed。
+
+原生 daemon 可能在取消訂閱後繼續保留閒置 writer；這時 Desktop 的 notLoaded 並不表示整段 session 已卸載。不要刪除鎖檔、改全域保留時間或重啟 daemon 強制交接。MCP 重載前也需確認 daemon 操作與背景載入已結束。
+
 ## 4. 安裝 Tunnel client 與私人連線
 
 依 [官方 Secure MCP Tunnel 指南](https://developers.openai.com/api/docs/guides/secure-mcp-tunnels) 建立專用 Tunnel，關聯正確的 ChatGPT workspace。管理階段需要 Read／Manage；runtime key 只給 Tunnels Read／Use，不重用其他專案的 Tunnel 或工作佇列。
@@ -130,7 +136,7 @@ Invoke-WebRequest "$healthUrl/readyz" -TimeoutSec 10
 
 外掛簡介：
 
-> Hermes Harness 是 ChatGPT Web 的本機工具框架。處理 Hermes、Codex、Windows 或網站任務時，先 hermes_context(cwd,task)，依 harness.steps 與 prerequisites.pending 完成閱讀，後續帶回 bootstrap_id；換任務或 cwd 重新初始化。按 context 各主題 guide 與 workflow 技能索引，只讀本次適用 references。網站用 browser_use：完整讀目前版本官方 guide，再 run；截圖前讀 mcp-images 範例。長工作沿 session_id 查 hermes_process_read；Codex 傳訊使用 codex_send，共用 operation_status 回執。完成驗證與清理後提交 hermes_task_review；有新通用經驗才按 skill_updates.guide 維護技能。本機原生 Codex 使用自己的工具，僅依人類明確要求調用 Hermes。
+> Hermes Harness 是 ChatGPT Web 的本機工具框架。處理 Hermes、Codex、Windows 或網站任務時，先 hermes_context(cwd,task)，依 harness.steps 與 prerequisites.pending 完成閱讀，後續帶回 bootstrap_id；換任務或 cwd 重新初始化。按 context 各主題 guide 與 workflow 技能索引，只讀本次適用 references。網站用 browser_use：完整讀目前版本官方 guide，再 run；截圖前讀 mcp-images 範例。長工作沿 session_id 查 hermes_process_read。Codex 傳訊使用 codex_send，自動選 Desktop 或既有 daemon，未載入時背景載入原 ID；沿 operation_status 唯讀等待，依 execution_backend、native_turn_id 與最新回執查證受理及原生 turn 狀態。完成驗證與清理後提交 hermes_task_review；有新通用經驗才按 skill_updates.guide 維護技能。本機原生 Codex 使用自己的工具，僅依人類明確要求調用 Hermes。
 
 新增工具後若 context 已顯示 browser_use，但 Web 無法發現可呼叫的工具，到現有 Hermes 外掛的 Manage → Refresh tools 同步目錄，核對目前 28 個工具包含 browser_use 與 hermes_task_review，再開獨立 Web 對話驗證；沿用原有連線與權限。
 

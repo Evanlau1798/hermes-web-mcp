@@ -90,14 +90,16 @@ async function query(command, threadId = '', options = {}) {
   };
   let client;
   try {
-    client = connect(options.pipe ?? selectPipe(), options.timeoutMs ?? 15000);
+    const pipe = options.pipe ?? selectPipe();
+    client = connect(pipe, options.timeoutMs ?? 15000);
     const catalog = await client.request('tools/list', {threadStartKind:'all'});
     if(command==='list'){
       const max=catalog?.tools?.find(t=>t.name==='list_threads'&&t.namespace==='codex_app')?.inputSchema?.properties?.limit?.maximum;
       args.limit=Math.min(limit+offset,Number.isInteger(max)&&max>0?max:50);
     }
     const data=parseAppJson(await appCall(client,catalog,tool,args,undefined,options.callerThreadId),tool);
-    const base = {source:'codex-desktop-live', observedAt:new Date().toISOString(), hostId:'local'};
+    const base = {source:'codex-desktop-live', observedAt:new Date().toISOString(), hostId:'local',
+      backend_instance_id:'desktop:'+pipe.slice(pipe.lastIndexOf('codex-app-tools-')+16)};
     if (command === 'list') {
       if (!Array.isArray(data.threads) || !Array.isArray(data.pinnedThreads)) throw fault('PROTOCOL_INVALID','parse',{tool,requestState:'received',deliveryState:'failed'});
       const rows=[...data.pinnedThreads,...data.threads].filter(t => t.kind === 'codex' || !t.kind);

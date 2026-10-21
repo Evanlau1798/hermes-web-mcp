@@ -4,6 +4,17 @@ const fs=require('node:fs'),path=require('node:path');
 const {randomUUID}=require('node:crypto');
 const {main}=require('./cli.cjs');
 const {spawnSync}=require('node:child_process');
+test('CLI reads and stop use the same backend router as Web',async()=>{
+  const calls=[];
+  const api={query:()=>assert.fail('raw Desktop query bypasses daemon routing')};
+  const deliver=(action,args)=>{calls.push([action,args]);return action==='status'?
+    {thread:{id:'target',title:'exact title'}}:{ok:true};};
+  await main(['status','target'],api,deliver);
+  await main(['read','target'],api,deliver);
+  await main(['stop','target'],api,deliver);
+  assert.equal(calls[0][0],'status');assert.equal(calls[1][0],'read');
+  assert.deepEqual(calls[3],['stop',{thread_id:'target',expected_title:'exact title'}]);
+});
 test('CLI uses configured Python outside a fixed Hermes installation without Desktop access',t=>{
   const root=fs.mkdtempSync(path.join(require('node:os').tmpdir(),'hermes cli '));
   t.after(()=>fs.rmSync(root,{recursive:true,force:true}));

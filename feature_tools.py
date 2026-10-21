@@ -58,7 +58,12 @@ def track(bridge, arguments, release_lock=None):
             if any(k in args for k in ('pid', 'window_id', 'completion_predicate')):
                 raise ValueError('Codex 追蹤只使用 thread_id 與 turn 狀態。')
             target = args.pop('thread_id')
-            sampler = lambda: safe_result(bridge.codex('status', {'thread_id': target}))
+            binding = {}
+            def sampler():
+                data = safe_result(bridge.codex('status', {'thread_id': target, **binding}))
+                if not binding and data.get('thread',{}).get('status',{}).get('type') in ('idle','active'):
+                    binding.update({k:data[k] for k in ('execution_backend','backend_instance_id') if data.get(k)})
+                return data
         else:
             if any(k in args for k in ('thread_id', 'expected_turn_id')):
                 raise ValueError('電腦追蹤只使用精確 pid + window_id。')

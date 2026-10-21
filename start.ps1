@@ -1,7 +1,7 @@
 #requires -Version 7.0
 param([switch]$Worker, [switch]$IfNotRunning, [string]$RuntimePaths)
 $ErrorActionPreference = 'Stop'
-$runtimeNames = @('PATH', 'HERMES_MCP_NODE', 'HERMES_MCP_PWSH', 'HERMES_MCP_PYTHON', 'HERMES_MCP_EGO_BROWSER')
+$runtimeNames = @('PATH', 'HERMES_MCP_NODE', 'HERMES_MCP_PWSH', 'HERMES_MCP_PYTHON', 'HERMES_MCP_EGO_BROWSER', 'HERMES_MCP_CODEX', 'CODEX_HOME')
 if ($Worker -and $RuntimePaths) {
     $paths = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($RuntimePaths)) | ConvertFrom-Json
     foreach ($name in $runtimeNames) {

@@ -111,7 +111,7 @@ send／resume 必填 `operation_id`，例如本次產生的 UUID。相同操作�
 
 快速投遞直接回執；耗時流程回傳操作 ID，使用唯讀 `codex_operation_status(operation_id)` 等待。受理不代表壓縮完成；背景只在新的原生 contextCompaction turn 成功完成、前一個 turn 正是準備階段的 baseline、目標仍閒置時，才傳送 RAM 中保存的原訊息。最後的 delivery receipt 仍以 accepted／unknown 等實際狀態解讀，用回傳的獨立 `delivery_operation_id` 查 `codex_delivery_status`，不另行 send。重複呼叫與查詢不重送；MCP 重啟不恢復尚未傳送的訊息，需重新檢查並由人類重新要求傳訊。
 
-notLoaded 目前回 BACKGROUND_LOAD_UNAVAILABLE、not-sent：目前 Desktop 工具目錄沒有可驗證的背景載入介面，不切換前景頁面或另啟 app-server。F10 背景載入仍未完成。GPT Live／語音另待驗證，不宣稱相容。
+傳訊自動選擇 Desktop 或既有 Codex daemon。未載入的對話可由 daemon 背景載入原 ID，核對配置及 baseline 後傳訊；status/read 不會載入。回執含 execution_backend、backend_instance_id，daemon 受理另有 native_turn_id。固定同一操作的後端，不在 writer 衝突或結果不明後換路重送。不切換前景、不另啟 app-server；GPT Live／語音另待驗證，不宣稱相容。
 
 active session 保留正常傳訊行為。原生 Compact 派送前核對兩次 idle 與 baseline；Desktop 協定沒有原子 expected-turn 條件，無法保證其他客戶端不在兩次檢查後介入。不要同時操作同一目標。狀態不明、介入或逾時時不傳送原訊息。
 
@@ -166,7 +166,7 @@ repo 內的 `Hermes_Local_Tools.vbs` 依自身位置尋找 `start.ps1`，隱藏�
 
 Gateway 與其他服務沿用各自的官方登入入口，不屬於 Web MCP 啟動鏈。部署磁碟需在登入時可用。要停用 MCP 自啟動，只移除啟動資料夾內的 `Hermes_Local_Tools.vbs`。
 
-Codex 工具每次呼叫會重新探索 Desktop 連線；Desktop 關閉或登入切換期間暫時不可用，重新開啟並完成登入後再查詢。橋接使用同一 Windows 使用者的本機 Desktop 資料，不持有獨立的 Codex 登入憑證；更換 OpenAI 帳號不等同切換 Windows 使用者或搬移對話。跨帳號的指定對話可見性以即時查詢結果為準。
+Codex 工具每次查證 Desktop／既有 daemon 的持有端；Desktop 關閉或登入切換期間，其列表與 Desktop 路徑可能暫時不可用。daemon 路徑使用其原有登入與配置，不複製認證、不自動切換帳號。更換 OpenAI 帳號不等同切換 Windows 使用者或搬移對話；可見性與可執行性以各後端即時回覆為準。
 
 更新程序查詢入口後，於既有工作可安全結束時重載專用 Tunnel，再到 ChatGPT 外掛設定重新整理 Hermes 工具清單，確認出現 `hermes_process_read`，以新對話先 Bootstrap 再驗證輪詢。重載前先核對本入口的背景工作與正在使用的連線；本機 stdio 測試不會更新已運作的 Tunnel 或 Web 工具快取。此更新調整程序查詢分類與等待行為，不代表已修復 ChatGPT Web 的 Allow all 權限套用問題。
 

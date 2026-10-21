@@ -1,5 +1,5 @@
 {
-  "recordedAt": "2026-10-20",
+  "recordedAt": "2026-10-21",
   "platform": "windows-x64",
   "hermes": {
     "repository": "https://github.com/NousResearch/hermes-agent.git",
@@ -20,5 +20,6 @@
     "binarySha256": "4226BB74A72388147882881F29F79801B95E285D731A138071812E3AA6766571",
     "archiveSha256": "EDEF7241B0C647FCB30F1A80FF376B6B25C51927960F257A3F01E21B17C2ABA6"
   },
-  "desktopProtocolObserved": "26.1013.4894.0"
+  "desktopProtocolObserved": "26.1013.4894.0",
+  "codexDaemonProtocolObserved": "0.163.0"
 }

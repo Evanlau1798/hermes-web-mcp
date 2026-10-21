@@ -56,9 +56,9 @@ def native_call(name, args, approval_callback=None, **context):
         approval_context.reset_hermes_interactive_context(token)
 
 
-from codex_adapter import CodexAdapter
+from codex_router import CodexRouter
 
-codex_call = CodexAdapter()
+codex_call = CodexRouter()
 
 
 def safe_result(value):
@@ -215,7 +215,9 @@ class Bridge:
                     required.append('message')
             self._add('codex_' + action, 'Codex：' + label + '。列表長標題僅預覽，操作前用 status/read 原樣取得同一筆 ID 與完整名稱；須有人類明確要求，禁止猜測或自動重送。accepted 不代表完成，最新進度優先 status，歷史以 read cursor 分頁。',
                       {'type': 'object', 'properties': props, 'required': required}, action in ('list', 'status', 'read'))
-        self.specs['codex_send']['description'] += ' 統一傳訊入口：active 交原生排隊；idle 只有非 Compact、上下文 >80k、完成超過30分鐘三者成立才背景壓縮後傳原訊息。快操作直接回執，耗時以 operation_status 唯讀接續。'
+        self.specs['codex_send']['description'] += ' 統一傳訊入口：自動選 Desktop 或既有 daemon；未載入時背景載入原 ID，active 原生傳訊，idle 依非 Compact、上下文 >80k、完成超過30分鐘判斷壓縮。沿 operation_status 唯讀等待，依 execution_backend 與 native_turn_id 查證。'
+        for name in ('codex_status','codex_read','codex_stop'):
+            self.specs[name]['description'] += ' 自動查證 Desktop／既有 daemon 持有端；status/read 不會載入對話，依 execution_backend 解讀狀態。'
         self.specs['codex_resume']['description'] += ' codex_send 的相容別名，省略 message 時使用預設續跑文字；共用 operation_id 去重。'
 
     def _add(self, name, description, schema, readonly):
@@ -441,6 +443,8 @@ class Bridge:
         if self.compact_jobs:
             self.compact_jobs.close()
         self.tracking.close()
+        if isinstance(self.codex,CodexRouter):
+            self.codex.close()
         if self.computer:
             self.computer.close()
         for session in process_registry.list_sessions(task_id=self.owner):

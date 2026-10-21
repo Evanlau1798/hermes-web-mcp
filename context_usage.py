@@ -5,9 +5,16 @@ import sqlite3
 from pathlib import Path
 
 
+def canonical_path(value):
+    value = str(value)
+    if os.name=='nt' and value.startswith('\\\\?\\'):
+        value = '\\\\'+value[8:] if value.startswith('\\\\?\\UNC\\') else value[4:]
+    return Path(value).resolve()
+
+
 def read_context_usage(thread_id, turn_id, home=None):
     unknown = {'contextTokens': None, 'source': 'native-last-token-usage'}
-    home = Path(home or os.environ.get('CODEX_HOME') or Path.home() / '.codex').resolve()
+    home = canonical_path(home or os.environ.get('CODEX_HOME') or Path.home() / '.codex')
     try:
         db = sqlite3.connect(f'file:{(home / "state_5.sqlite").as_posix()}?mode=ro', uri=True, timeout=1)
         try:
@@ -16,8 +23,8 @@ def read_context_usage(thread_id, turn_id, home=None):
             db.close()
         if not row or not turn_id:
             return unknown
-        path = Path(row[0]).resolve()
-        if not any(path.is_relative_to(home / root) for root in ('sessions', 'archived_sessions')):
+        path = canonical_path(row[0])
+        if not any(path.is_relative_to(canonical_path(home / root)) for root in ('sessions', 'archived_sessions')):
             return unknown
         with path.open('rb') as stream:
             start = max(0, path.stat().st_size - 4 * 1024 * 1024)
