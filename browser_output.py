@@ -26,5 +26,15 @@ def format_result(result, session, timings):
     result['log'] = {'tool': 'hermes_process_read', 'arguments': {
         'action': 'log', 'session_id': session,
         **selection}, 'scope': 'retained_rolling_buffer'}
+    if result.get('status') in ('running', 'timeout', 'interrupted') or result.get('process_running'):
+        result['next_action'] = {'tool': 'hermes_process_read', 'arguments': {'action': 'poll', 'session_id': session}}
+    elif result.get('truncated') and result.get('log_availability') != 'unavailable':
+        arguments = dict(result['log']['arguments'])
+        if page and page.get('next_char_offset') is not None:
+            arguments['char_offset'] = page['next_char_offset']
+        elif page and page.get('next_line_offset') is not None:
+            arguments.update(offset=page['next_line_offset'], char_offset=0)
+        if not page or page.get('next_char_offset') is not None or page.get('next_line_offset') is not None:
+            result['next_action'] = {'tool': 'hermes_process_read', 'arguments': arguments}
     result['timings_ms'] = dict(timings)
     return result

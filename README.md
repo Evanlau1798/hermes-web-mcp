@@ -41,6 +41,8 @@ Hermes MCP 預設供 ChatGPT Web 使用。Web 對話涉及 Hermes、Codex 或 Wi
 
 ## 檔案與 PowerShell
 
+Browser 完成回執若只含原生尾端預覽，會從保留日誌補讀開頭最多 6,000 字元；`next_action` 指向原程序的下一段文字或狀態查詢。保留日誌不可用會明確標示，補讀不重新執行瀏覽器動作。`reading_metrics` 記錄本任務實際讀取次數、主題、回傳字元與重複次數，不保存正文，也不代表 token 或模型閱讀耗時；達統計界限會標示 bounded。
+
 - `hermes_read_file`：讀取檔案；既有檔案準備整份覆寫時，先完整讀取。
 - `hermes_search_files`：依名稱或內容搜尋。
 - `hermes_write_file`：建立或整份寫入；檔案變更後重新讀取、合併再寫。

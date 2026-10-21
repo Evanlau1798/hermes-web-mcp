@@ -47,6 +47,8 @@ class BrowserAdapter:
         self.root = root or ROOT / 'tmp/browser-use'
         self.runs = {}
         self.sessions = {}
+        self.head_reads = set()
+        self.images_delivered = set()
 
     def call(self, args, native, owner, approve):
         from backend import safe_result
@@ -89,6 +91,8 @@ class BrowserAdapter:
                         break
                     if old not in self.runs:
                         del self.sessions[old]
+                        self.head_reads.discard(old)
+                        self.images_delivered.discard(old)
                 self.sessions[session] = timings
                 waiting = time.perf_counter()
                 result = _data(native('process_manage', {'action': 'wait', 'session_id': session, 'timeout': 25},
@@ -96,7 +100,8 @@ class BrowserAdapter:
                 timings['wait_ms'] = round((time.perf_counter() - waiting) * 1000, 3)
                 timings['local_total_ms'] = round((time.perf_counter() - beginning) * 1000, 3)
                 result['session_id'] = session
-                return self.collect(session, result)
+                return self.collect(session, result, read_log=lambda args: _data(native(
+                    'process_manage', args, approval_callback=approve, task_id=owner, session_id=owner)))
             if folder and result.get('error'):
                 shutil.rmtree(folder)
             return ComputerResult(safe_result({**result, 'automaticRetrySafe': False,
@@ -110,12 +115,27 @@ class BrowserAdapter:
                 **({'session_id': session} if session else {}),
                 'outcome': 'unknown' if started else 'not-sent'}), [])
 
-    def collect(self, session, result):
+    def collect(self, session, result, read_log=None):
         from backend import safe_result
         folder = self.runs.get(session)
         if folder is None and session not in self.sessions:
             return None
         result = {**result, 'session_id': session, 'automaticRetrySafe': False}
+        completed = result.get('status') in ('exited', 'completed', 'already_exited')
+        if completed and read_log and session not in self.head_reads and 'log_page' not in result \
+                and (result.get('output_cut', 0) or 'output_preview' in result):
+            self.head_reads.add(session)
+            try:
+                original = _data(read_log({'action': 'log', 'session_id': session, 'offset': 0, 'limit': 200}))
+                if not isinstance(original.get('output'), str) or original.get('error'):
+                    raise ValueError('保留日誌已不可讀；無法完整還原輸出。')
+                from process_output import page_log
+                page = page_log(original, offset=0, limit=200)
+                result.update(output=page['output'], log_page=page['log_page'], truncated=page['truncated'])
+                result.pop('output_cut', None)
+                result.pop('output_preview', None)
+            except Exception:
+                result['log_availability'] = 'unavailable'
         images = []
         if folder is not None and result.get('status') in ('exited', 'completed', 'already_exited') \
                 and result.get('completion_reason', 'exited') == 'exited':
@@ -128,7 +148,9 @@ class BrowserAdapter:
                     data = image.read_bytes()
                     if not data.startswith(b'\x89PNG\r\n\x1a\n') or len(data) > 8 * 1024 * 1024:
                         raise ValueError('截圖必須為有效大小的 PNG。')
-                    images.append(('image/png', base64.b64encode(data).decode('ascii')))
+                    if session not in self.images_delivered:
+                        images.append(('image/png', base64.b64encode(data).decode('ascii')))
+                        self.images_delivered.add(session)
             except (OSError, ValueError) as exc:
                 result['image_error'] = str(exc)
             finally:

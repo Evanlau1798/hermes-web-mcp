@@ -5,6 +5,7 @@ import threading
 import uuid
 import time
 import re
+import os
 import hashlib
 from collections import OrderedDict
 
@@ -279,6 +280,9 @@ class Bridge:
                                        'execution_ready':state['execution_ready'],
                                        'terminal_default': 'powershell',
                                        'next_step': '按任務讀取完整相關技能，再選擇檔案、PowerShell、電腦操作或 Codex 對話工具。'}
+                if client:
+                    from guidance_metrics import record
+                    result['reading_metrics'] = record(client, 'hermes_context', 0, json.dumps(result, ensure_ascii=False))
                 return result
             if client:
                 client['seen'] = now
@@ -300,7 +304,11 @@ class Bridge:
                 if self.browser is None:
                     from browser_adapter import BrowserAdapter
                     self.browser = BrowserAdapter()
-                return self.browser.call(arguments, self.native, self.owner, approve)
+                result = self.browser.call(arguments, self.native, self.owner, approve)
+                if client and arguments['action'] == 'guide' and isinstance(result.payload.get('output'), str):
+                    from guidance_metrics import record
+                    result.payload['reading_metrics'] = record(client, 'ego-official-guide', 0, result.payload['output'])
+                return result
             if name in ('hermes_tracking', 'hermes_tracking_status'):
                 from feature_tools import track
                 def release_tracking_lock():
@@ -328,6 +336,10 @@ class Bridge:
                 return safe_result(result)
             if name == 'hermes_skill_read':
                 result = discovery.skill_read(**arguments)
+                if client and result.get('success'):
+                    from guidance_metrics import record
+                    result['reading_metrics'] = record(client, arguments['skill_id'] + '/' + arguments.get('file_path', 'SKILL.md'),
+                                                       arguments.get('offset', 0), result['content'])
                 if client and result.get('success') and arguments.get('file_path', 'SKILL.md') == 'SKILL.md':
                     skill = arguments['skill_id']
                     expected = client['pages'].get(skill, 0)
@@ -392,12 +404,18 @@ class Bridge:
                 result['shell'] = terminal_meta['shell']
                 result = terminal_receipt(result)
             if tool == 'process_manage' and self.browser and arguments.get('session_id'):
-                browser_result = self.browser.collect(arguments['session_id'], result)
+                browser_result = self.browser.collect(arguments['session_id'], result,
+                    read_log=lambda args: self.native('process_manage', args, approval_callback=approve,
+                                                      task_id=self.owner, session_id=self.owner))
                 if browser_result is not None:
                     return browser_result
             result = safe_result(result)
             if client and tool == 'read_file' and isinstance(result, dict):
                 record_instruction(client, arguments, result)
+                key = os.path.normcase(os.path.abspath(arguments['path']))
+                if key in client['instructions'] and isinstance(result.get('content'), str) and not result.get('error'):
+                    from guidance_metrics import record
+                    result['reading_metrics'] = record(client, 'AGENTS.md:' + arguments['path'], arguments.get('offset', 1), result['content'])
                 result['prerequisites'] = prerequisites(client, client['risk'])
             return result
         finally:
