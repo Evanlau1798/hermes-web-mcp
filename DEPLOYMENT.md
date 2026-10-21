@@ -173,4 +173,6 @@ node --test test_codex_input.cjs codex-status/test.cjs codex-status/test_diagnos
 
 本機設定、DPAPI、profile、`.env` 與 override 值不可提交。重載專用 Tunnel 前核對呼叫、背景程序、`runtime/compact-jobs.sqlite`，有 compacting／sending 時不要重啟。只停止 `runtime/tunnel.pid` 且 ExecutablePath 符合本入口的程序，再啟動；不碰其他 Tunnel。schema 變更才需刷新 Web 工具清單。Desktop 登入切換後先 status，context 失效則更新本機 JSON，不重送結果不明的操作。
 
+更新 browser use 導引後，將 repo 的 hermes-web-mcp-workflows 技能經原生 skill_manage 精確更新至本機並讀回核對，再重載專用 MCP。工具描述快取仍舊時在現有外掛 Refresh tools；不另建連線或修改權限。獨立 Web 驗證使用可丟棄、跨網站概念的測試頁：延遲主內容、導航已生效但 load 逾時、引用／回覆先於主欄位。確認有界等待、同 Space 恢復、未重送動作，以及主實體欄位來源正確；結束釋放 Space，移除暫存測試服務。成功瀏覽不等同所有擷取欄位正確，逐項保留回執證據。
+
 本次 source 更新需在適當時機重載專用 Tunnel 才會套用；此文件不代表授權自動重載。搬移後另外更新忽略的 profile 中 Python／server 路徑及本機 Startup entry。私人資料如需搬移，使用另外的離線備份，禁止加入 Git。CLI／Gateway 可依固定官方版本重新 setup，登入入口保留 Scheduled Task／Startup fallback 其中一種避免重複。
