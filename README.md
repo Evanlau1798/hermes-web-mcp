@@ -96,6 +96,8 @@ capture 的 mode=som 回傳畫面與元素編號，mode=vision 回傳畫面，mo
 
 ## Codex 對話
 
+唯讀 status/read 優先保留已核實的 Desktop 結果；殘留或無法驗證的 daemon 身分不會阻擋有效 Desktop 讀取，另以 ownerVerification 標示未知，寫入仍維持嚴格持有端檢查。Desktop 明確拒絕讀取時不轉送其他後端、不載入 session。read 可附 historicalSnapshot：僅限同 ID、允許目錄的本機 rollout 公開訊息，標明 snapshotAsOf、來源及非即時性；外層錯誤與 requestId 保留，不以檔案修改時間判定 active。
+
 - `codex_list`：預設簡表，limit / offset 控制顯示；長標題以 title_preview 呈現。
 - `codex_status`：取得完整名稱、即時 idle / active / notLoaded，以及最新 turn 狀態。
 - `codex_read`：以 cursor、turn_limit、message_limit、max_chars 控制讀取；依 page.nextCursor 接續，並取得子代理 ID。
@@ -115,7 +117,7 @@ send／resume 必填 `operation_id`，例如本次產生的 UUID。相同操作�
 
 active session 保留正常傳訊行為。原生 Compact 派送前核對兩次 idle 與 baseline；Desktop 協定沒有原子 expected-turn 條件，無法保證其他客戶端不在兩次檢查後介入。不要同時操作同一目標。狀態不明、介入或逾時時不傳送原訊息。
 
-list／status／read 失敗回傳 `stage`、`errorCode`、`requestId`、`observedAt`、`source`／`tool`、`requestState`、`deliveryState`、逾時／斷線旗標與建議處置。明確失敗、尚未送出與結果不明分開；底層私密錯誤只保留分類、可安全揭露的原生錯誤碼及指紋。notLoaded 不代表閒置，查詢失敗不回退成歷史快照。
+list／status／read 失敗回傳 `stage`、`errorCode`、`requestId`、`observedAt`、`source`／`tool`、`requestState`、`deliveryState`、逾時／斷線旗標與建議處置。明確失敗、尚未送出與結果不明分開；底層私密錯誤只保留分類、可安全揭露的原生錯誤碼及指紋。notLoaded 不代表閒置；list／status 不以歷史代替即時結果，read 失敗可另附有大小上限及明確標示的 historicalSnapshot，不取代外層失敗狀態。
 
 ## 持續追蹤
 

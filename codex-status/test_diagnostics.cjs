@@ -20,6 +20,18 @@ async function fixture(t,handler){
   t.after(async()=>{for(const s of sockets)s.destroy();await new Promise(r=>server.close(r));});return pipe;
 }
 const catalog={tools:[{name:'read_thread',namespace:'codex_app'},{name:'list_threads',namespace:'codex_app'}]};
+test('native auth, writer and history errors remain distinguishable without private text',()=>{
+  const {remoteFault,envelope}=require('./diagnostics.cjs');
+  for(const [message,code] of [
+    ['Your access token could not be refreshed because you have since logged out or signed in to another account.','AUTHENTICATION_REQUIRED'],
+    ['This is open in another app. Close it there to continue here.','BACKEND_WRITER_CONFLICT'],
+    ['history_fetch_failed','THREAD_HISTORY_UNAVAILABLE']]){
+    const result=envelope(remoteFault({error:{message:message+' PRIVATE-SECRET'}},'request',{requestId:'existing-request'}));
+    assert.equal(result.errorCode,code);
+    assert.equal(result.requestId,'existing-request');
+    assert.ok(!JSON.stringify(result).includes('PRIVATE-SECRET'));
+  }
+});
 test('discovery distinguishes missing and multiple instances',()=>{
   assert.throws(()=>selectPipe([]),e=>e.code==='DESKTOP_PIPE_MISSING'&&e.stage==='discover');
   assert.throws(()=>selectPipe([`codex-app-tools-${ID}`,`codex-app-tools-${randomUUID()}`]),e=>e.code==='DESKTOP_PIPE_AMBIGUOUS');

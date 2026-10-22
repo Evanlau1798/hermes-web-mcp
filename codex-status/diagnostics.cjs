@@ -1,5 +1,8 @@
 const {randomUUID, createHash} = require('node:crypto');
 const reasons = {
+  AUTHENTICATION_REQUIRED: ['Codex 登入憑證無法刷新或已失效；查詢／操作未完成。', '在實際持有端確認登入帳號；不要由 Hermes 自動登入、刷新或重送。'],
+  BACKEND_WRITER_CONFLICT: ['Codex 回報此對話由其他應用程式持有。', '查證實際持有端；不要另啟 CLI、搶鎖或以另一後端重送。'],
+  THREAD_HISTORY_UNAVAILABLE: ['Desktop 未能完成對話歷史彙整；即時讀取未確認。', '保留 requestId 排查原生 history_fetch_failed；歷史快照不可當成即時狀態。'],
   NATIVE_PAGINATION_LIMIT: ['要求的 offset 超出 Desktop 可讀取的有界快照；不代表找不到對話。', '縮小查詢 offset；已知 thread_id 時直接 status/read。Desktop 無 cursor，勿重試相同深頁。'],
   NATIVE_ARGUMENTS_INVALID: ['Desktop 拒絕工具參數；本次未完成查詢。', '依 Desktop 工具 schema 調整參數；保留 requestId，不重試相同參數。'],
   TARGET_CHANGED: ['指定 session 的狀態或最新 turn 已改變，未派送。', '重新查詢並讓使用者確認後，再準備新的操作。'],
@@ -22,6 +25,9 @@ const reasons = {
 };
 function classify(value, fallback='DESKTOP_REJECTED') {
   const s=String(value ?? '');
+  if (/access token could not be refreshed|refresh_token_(?:reused|expired)|logged out or signed in to another account|authentication required/i.test(s)) return 'AUTHENTICATION_REQUIRED';
+  if (/active.writer|open in another app/i.test(s)) return 'BACKEND_WRITER_CONFLICT';
+  if (/history_fetch_failed|failed to (?:read|fetch|build).{0,40}history/i.test(s)) return 'THREAD_HISTORY_UNAVAILABLE';
   if (/invalid.{0,24}(?:argument|parameter|limit)|(?:argument|parameter).{0,24}(?:invalid|validation)|too_big|maximum.*limit/i.test(s)) return 'NATIVE_ARGUMENTS_INVALID';
   if (/method.?not.?found|unsupported|incompatible|request-version-mismatch/i.test(s)) return 'CAPABILITY_UNAVAILABLE';
   if (/not.?loaded/i.test(s)) return 'THREAD_NOT_LOADED';

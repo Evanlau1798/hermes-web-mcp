@@ -1,6 +1,11 @@
 """Choose one verified owner, then keep writes on that backend instance."""
 from daemon_adapter import DaemonAdapter, failure
 from codex_adapter import CodexAdapter
+from rollout_history import history_snapshot
+
+
+def rejected(result):
+    return not isinstance(result,dict) or bool(result.get('errorCode') or result.get('error')) or result.get('ok') is False
 
 
 class CodexRouter:
@@ -9,6 +14,18 @@ class CodexRouter:
         self.daemon = daemon if daemon is not None else DaemonAdapter()
 
     def __call__(self, action, args):
+        result=self._route(action,args)
+        if action in ('status','read'):
+            result={**result,'liveStatusConfirmed':not rejected(result) and
+                    result.get('thread',{}).get('id')==args['thread_id'] and
+                    result.get('thread',{}).get('status',{}).get('type') in ('idle','active','systemError')}
+            if action=='read' and rejected(result):
+                history=history_snapshot(args['thread_id'],message_limit=args.get('message_limit',12),max_chars=args.get('max_chars',1000))
+                if history:
+                    result['historicalSnapshot']=history
+        return result
+
+    def _route(self, action, args):
         args = dict(args)
         if action in ('list','delivery_status'):
             return self.desktop(action,args)
@@ -17,6 +34,8 @@ class CodexRouter:
         if pinned:
             if pinned=='desktop':
                 before = self.desktop('status',{'thread_id':args['thread_id']})
+                if rejected(before):
+                    return before
                 if instance and before.get('backend_instance_id')!=instance:
                     return failure('BACKEND_INSTANCE_CHANGED')
                 if before.get('thread',{}).get('status',{}).get('type')=='notLoaded':
@@ -38,6 +57,8 @@ class CodexRouter:
                 return failure('BACKEND_OWNER_CHANGED')
             return self.daemon(action,{**args,'backend_instance_id':instance})
         desktop = self.desktop('status',{'thread_id':args['thread_id']})
+        if action in ('status','read') and rejected(desktop):
+            return desktop
         dthread = desktop.get('thread') or {}
         desktop_loaded = dthread.get('id')==args['thread_id'] and (dthread.get('status') or {}).get('type') in ('idle','active','systemError')
         probe = self.daemon.probe(args['thread_id'])
@@ -45,8 +66,12 @@ class CodexRouter:
             return failure('BACKEND_OWNER_CONFLICT')
         if desktop_loaded:
             if not probe.get('available') and probe.get('errorCode')!='DAEMON_UNAVAILABLE':
-                return failure(probe.get('errorCode') or 'BACKEND_OWNER_UNCONFIRMED')
+                if action not in ('status','read'):
+                    return failure(probe.get('errorCode') or 'BACKEND_OWNER_UNCONFIRMED')
+                desktop={**desktop,'ownerVerification':{'state':'unknown','errorCode':probe.get('errorCode')}}
             result = desktop if action in ('status','ensure') else self.desktop(action,args)
+            if desktop.get('ownerVerification'):
+                result={**result,'ownerVerification':desktop['ownerVerification']}
             return {**result,'execution_backend':'desktop','backend_instance_id':desktop.get('backend_instance_id')}
         if probe.get('available') and probe.get('loaded'):
             return self.daemon('status' if action=='ensure' else action,
