@@ -1,4 +1,5 @@
 import math
+import json
 import re
 import sqlite3
 import threading
@@ -8,6 +9,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from compact_state import valid_timestamp, should_compact
 from operation_summary import summarize, observe_turn as observe_latest_turn
+from codex_failure import error_details
+from compact_snapshot import read_snapshot
 
 
 class CompactJobs:
@@ -52,7 +55,7 @@ class CompactJobs:
                 updated_at REAL NOT NULL, confirmed_at REAL, compact_started_at REAL,
                 compact_completed_at REAL, delivery_started_at REAL, delivery_completed_at REAL)''')
             columns = {r[1] for r in db.execute('PRAGMA table_info(jobs)')}
-            for name in ('execution_backend','backend_instance_id','native_turn_id','baseline_turn_status'):
+            for name in ('execution_backend','backend_instance_id','native_turn_id','baseline_turn_status','error_details'):
                 if name not in columns:
                     db.execute(f'ALTER TABLE jobs ADD COLUMN {name} TEXT')
             db.execute('''CREATE UNIQUE INDEX IF NOT EXISTS one_active_compact_job_per_thread
@@ -96,51 +99,7 @@ class CompactJobs:
         return compact_receipt(row, bool(worker and worker.is_alive()))
 
     def _read_snapshot(self, thread_id, expected_title, binding=None):
-        try:
-            data = self.api('status', {'thread_id': thread_id, **self._binding(binding)})
-        except Exception:
-            return None, 'STATUS_UNAVAILABLE'
-        if not isinstance(data, dict) or data.get('ok') is False or data.get('errorCode'):
-            return None, 'STATUS_UNAVAILABLE'
-        thread = data.get('thread')
-        status = thread.get('status') if isinstance(thread, dict) else None
-        turn = data.get('latestTurn')
-        compact = data.get('compactState')
-        if not isinstance(thread, dict) or not isinstance(status, dict) or not isinstance(status.get('type'), str) \
-                or not isinstance(turn, dict) or not isinstance(turn.get('id'), str) or not turn['id'] \
-                or not isinstance(turn.get('status'), str) or not isinstance(compact, dict) \
-                or not isinstance(compact.get('lastTurnIsCompaction'), bool):
-            return None, 'SNAPSHOT_INVALID'
-        if thread.get('id') != thread_id:
-            return None, 'THREAD_ID_MISMATCH'
-        if thread.get('title') != expected_title:
-            return None, 'THREAD_TITLE_MISMATCH'
-        if status['type'] == 'notLoaded':
-            return None, 'THREAD_NOT_LOADED'
-        completed_at = turn.get('completedAt')
-        if completed_at is not None and not valid_timestamp(completed_at):
-            return None, 'SNAPSHOT_INVALID'
-        compact_completed_at = compact.get('completedAt')
-        if compact_completed_at is not None and not valid_timestamp(compact_completed_at):
-            return None, 'SNAPSHOT_INVALID'
-        if compact_completed_at is not None and compact_completed_at != completed_at:
-            return None, 'SNAPSHOT_INVALID'
-        if compact.get('turnId') is not None and not isinstance(compact.get('turnId'), str):
-            return None, 'SNAPSHOT_INVALID'
-        seen = compact.get('nativeCompactionItemSeen')
-        if seen is not None and not isinstance(seen, bool):
-            return None, 'SNAPSHOT_INVALID'
-        if not isinstance(turn['id'], str) or len(turn['id']) > 256 \
-                or (compact.get('turnId') is not None and len(compact['turnId']) > 256):
-            return None, 'SNAPSHOT_INVALID'
-        recent = data.get('recentTurnIds')
-        previous = recent[1] if isinstance(recent, list) and len(recent) == 2 and recent[0] == turn['id'] else None
-        return {'thread_state': status['type'], 'turn_id': turn['id'], 'turn_status': turn['status'], 'previous_turn_id': previous,
-                'completed_at': completed_at, 'compacted': compact['lastTurnIsCompaction'],
-                'compact_turn_id': compact.get('turnId'),
-                'compact_completed_at': compact_completed_at,
-                'auto_compact': should_compact(data),
-                'native_compaction_item_seen': compact.get('nativeCompactionItemSeen')}, None
+        return read_snapshot(self.api,thread_id,expected_title,self._binding(binding))
 
     @staticmethod
     def _complete(snapshot):
@@ -213,7 +172,7 @@ class CompactJobs:
                     return self._error(capacity_error)
         current, error = self._read_snapshot(thread_id, expected_title, binding)
         if error:
-            return self._error(error)
+            return {**self._error(error),'error_details':(current or {}).get('diagnostic')}
         if current['thread_state'] != 'idle':
             return self._error('THREAD_NOT_IDLE')
         if not self._terminal(current):
@@ -276,7 +235,7 @@ class CompactJobs:
             self._update(operation_id, state='confirming', choice=choice)
         current, error = self._read_snapshot(row['thread_id'], payload[0], row)
         if error:
-            self._reject(operation_id, error)
+            self._reject(operation_id, error,(current or {}).get('diagnostic'))
             return self._view_for_id(operation_id)
         if not self._same_baseline(current, row):
             self._reject(operation_id, 'BASELINE_CHANGED')
@@ -303,9 +262,10 @@ class CompactJobs:
                 self.payloads.pop(operation_id, None)
             return self._view_for_id(operation_id)
 
-    def _reject(self, operation_id, code):
+    def _reject(self, operation_id, code, details=None):
         with self.lock:
-            self._update(operation_id, state='rejected', error_code=code, delivery_state='not-sent')
+            self._update(operation_id, state='rejected', error_code=code, delivery_state='not-sent',
+                         error_details=json.dumps(details) if details else None)
             self.payloads.pop(operation_id, None)
 
     def _interrupt(self, operation_id, code):
@@ -316,9 +276,10 @@ class CompactJobs:
                              delivery_state='unknown' if row['delivery_started_at'] else 'not-sent')
             self.payloads.pop(operation_id, None)
 
-    def _fail_compaction(self, operation_id, state, code):
+    def _fail_compaction(self, operation_id, state, code, details=None):
         with self.lock:
-            self._update(operation_id, state=state, error_code=code, delivery_state='not-sent')
+            self._update(operation_id, state=state, error_code=code, delivery_state='not-sent',
+                         error_details=json.dumps(details) if details else None)
             self.payloads.pop(operation_id, None)
 
     def _compact(self, operation_id, row, title):
@@ -327,7 +288,7 @@ class CompactJobs:
             return None
         current, error = self._read_snapshot(row['thread_id'], title, row)
         if error:
-            self._fail_compaction(operation_id, 'compaction_failed', error)
+            self._fail_compaction(operation_id, 'compaction_failed', error,(current or {}).get('diagnostic'))
             return None
         if not self._same_baseline(current, row):
             self._fail_compaction(operation_id, 'compaction_failed', 'BASELINE_CHANGED')
@@ -343,14 +304,15 @@ class CompactJobs:
         try:
             result = self.api('compact_start', {'thread_id': row['thread_id'], 'expected_title': title,
                                                 'expected_baseline_turn_id': row['baseline_turn_id'], **self._binding(row)})
-        except Exception:
-            result = None
+        except Exception as exc:
+            result = {'error_details':error_details(exc,'compact_start')}
         delivery = result.get('deliveryState') if isinstance(result, dict) else None
         if delivery != 'accepted':
             state = 'compaction_failed' if delivery in ('not-sent', 'failed', 'rejected') else 'compaction_unknown'
             self._fail_compaction(operation_id, state,
                                   'COMPACTION_START_REJECTED' if state == 'compaction_failed'
-                                  else 'COMPACTION_START_UNKNOWN')
+                                  else 'COMPACTION_START_UNKNOWN',
+                                  (result.get('error_details') if isinstance(result,dict) else None) or error_details(result,'compact_start'))
             return None
         deadline = started + self.deadline_seconds
         while True:
@@ -363,13 +325,13 @@ class CompactJobs:
             try:
                 self.sleep(self.poll_interval)
                 current, error = self._read_snapshot(row['thread_id'], title, row)
-            except Exception:
-                current, error = None, 'STATUS_UNAVAILABLE'
+            except Exception as exc:
+                current, error = {'diagnostic':error_details(exc,'compact_poll')}, 'STATUS_UNAVAILABLE'
             if error:
-                self._fail_compaction(operation_id, 'compaction_unknown', 'COMPACTION_STATUS_UNKNOWN')
+                self._fail_compaction(operation_id, 'compaction_unknown', 'COMPACTION_STATUS_UNKNOWN',(current or {}).get('diagnostic'))
                 return None
             if current['turn_id'] != row['baseline_turn_id'] and current['turn_status'] in ('failed', 'interrupted'):
-                self._fail_compaction(operation_id, 'compaction_failed', 'COMPACTION_FAILED')
+                self._fail_compaction(operation_id, 'compaction_failed', 'COMPACTION_FAILED',current.get('diagnostic'))
                 return None
             if current['turn_id'] != row['baseline_turn_id'] and current['turn_status'] == 'completed':
                 if not self._confirmed_compaction(current) or current['previous_turn_id'] != row['baseline_turn_id']:
@@ -384,7 +346,8 @@ class CompactJobs:
         if error or verified['thread_state'] != 'idle' or verified['turn_id'] != candidate['turn_id'] \
                 or verified['turn_status'] != 'completed' or verified['completed_at'] is None \
                 or not self._confirmed_compaction(verified) or verified['previous_turn_id'] != row['baseline_turn_id']:
-            self._fail_compaction(operation_id, 'compaction_failed', error or 'COMPACTION_NOT_CONFIRMED')
+            self._fail_compaction(operation_id, 'compaction_failed', error or 'COMPACTION_NOT_CONFIRMED',
+                                  (verified or {}).get('diagnostic'))
             return None
         with self.lock:
             self._update(operation_id, compact_turn_id=verified['turn_id'], compact_complete=1,
@@ -455,12 +418,13 @@ class CompactJobs:
                     self._fail_compaction(operation_id, 'delivery_not_sent', 'BASELINE_CHANGED')
                     return
             self._send(operation_id, row, title, message, baseline)
-        except Exception:
+        except Exception as exc:
             row = self._row(operation_id)
             if row and row['delivery_started_at']:
-                self._update(operation_id, state='delivery_unknown', delivery_state='unknown', error_code='WORKER_FAILED')
+                self._update(operation_id, state='delivery_unknown', delivery_state='unknown', error_code='WORKER_FAILED',
+                             error_details=json.dumps(error_details(exc,'worker')))
             else:
-                self._fail_compaction(operation_id, 'compaction_unknown', 'WORKER_FAILED')
+                self._fail_compaction(operation_id, 'compaction_unknown', 'WORKER_FAILED',error_details(exc,'worker'))
 
     def status(self, operation_id, observe_turn=False):
         if not isinstance(observe_turn, bool):

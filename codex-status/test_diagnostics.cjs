@@ -32,6 +32,19 @@ test('native auth, writer and history errors remain distinguishable without priv
     assert.ok(!JSON.stringify(result).includes('PRIVATE-SECRET'));
   }
 });
+test('failed turns retain safe native error and actual query correlation',async t=>{
+  const pipe=await fixture(t,r=>r.method==='tools/list'?catalog:{success:true,contentItems:[{type:'inputText',text:JSON.stringify({
+    thread:{id:ID,status:{type:'idle'}},turns:[{id:'failed-compact',status:'failed',error:{message:
+      'Error running remote compact task: Your access token could not be refreshed because you have since logged out or signed in to another account. PRIVATE'}}]})}]});
+  const result=await query('status',ID,{pipe});
+  assert.equal(result.latestTurn.nativeError?.errorCode,'AUTHENTICATION_REQUIRED');
+  assert.equal(result.latestTurn.nativeError?.reasonCode,'AUTH_ACCOUNT_CHANGED');
+  assert.equal(result.latestTurn.nativeError?.requestId,result.requestId);
+  assert.equal(result.latestTurn.nativeError?.requestPurpose,'observation');
+  assert.equal(result.latestTurn.nativeError?.requestState,undefined);
+  assert.equal(result.latestTurn.nativeError?.deliveryState,undefined);
+  assert.ok(!JSON.stringify(result).includes('PRIVATE'));
+});
 test('discovery distinguishes missing and multiple instances',()=>{
   assert.throws(()=>selectPipe([]),e=>e.code==='DESKTOP_PIPE_MISSING'&&e.stage==='discover');
   assert.throws(()=>selectPipe([`codex-app-tools-${ID}`,`codex-app-tools-${randomUUID()}`]),e=>e.code==='DESKTOP_PIPE_AMBIGUOUS');

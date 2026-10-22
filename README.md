@@ -117,6 +117,8 @@ send／resume 必填 `operation_id`，例如本次產生的 UUID。相同操作�
 
 active session 保留正常傳訊行為。原生 Compact 派送前核對兩次 idle 與 baseline；Desktop 協定沒有原子 expected-turn 條件，無法保證其他客戶端不在兩次檢查後介入。不要同時操作同一目標。狀態不明、介入或逾時時不傳送原訊息。
 
+Compact 錯誤的安全分類、階段、requestId／nativeMethod 與相關失敗 turn 會保存在 error_details，重啟後仍可用同一 operation_id 查詢。只有已確認的原生 Compact 完成才會傳送原訊息；失敗、未知及觀測失敗均不自動重做或換 ID。turn_observation 的 error_details 另表示本次唯讀查詢失敗，不能改寫原操作終態。舊回執未曾保存的底層原因會維持空值，不從另一後端補寫或推測；帳號認證與其他應用持有衝突由 Codex 持有端處理，不由 Hermes 自動登入、搶鎖或重啟。
+
 list／status／read 失敗回傳 `stage`、`errorCode`、`requestId`、`observedAt`、`source`／`tool`、`requestState`、`deliveryState`、逾時／斷線旗標與建議處置。明確失敗、尚未送出與結果不明分開；底層私密錯誤只保留分類、可安全揭露的原生錯誤碼及指紋。notLoaded 不代表閒置；list／status 不以歷史代替即時結果，read 失敗可另附有大小上限及明確標示的 historicalSnapshot，不取代外層失敗狀態。
 
 ## 持續追蹤

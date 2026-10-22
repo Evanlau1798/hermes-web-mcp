@@ -1,5 +1,5 @@
 const {connect} = require('./transport.cjs');
-const {fault,remoteFault} = require('./diagnostics.cjs');
+const {fault,remoteFault,envelope} = require('./diagnostics.cjs');
 const {preflight,describe} = require('./compact.cjs');
 const fs = require('node:fs');
 const {randomUUID} = require('node:crypto');
@@ -97,8 +97,9 @@ async function query(command, threadId = '', options = {}) {
       const max=catalog?.tools?.find(t=>t.name==='list_threads'&&t.namespace==='codex_app')?.inputSchema?.properties?.limit?.maximum;
       args.limit=Math.min(limit+offset,Number.isInteger(max)&&max>0?max:50);
     }
-    const data=parseAppJson(await appCall(client,catalog,tool,args,undefined,options.callerThreadId),tool);
-    const base = {source:'codex-desktop-live', observedAt:new Date().toISOString(), hostId:'local',
+    const requestId=`hermes-bridge-${randomUUID()}`;
+    const data=parseAppJson(await appCall(client,catalog,tool,args,requestId,options.callerThreadId),tool);
+    const base = {source:'codex-desktop-live', observedAt:new Date().toISOString(), hostId:'local',requestId,
       backend_instance_id:'desktop:'+pipe.slice(pipe.lastIndexOf('codex-app-tools-')+16)};
     if (command === 'list') {
       if (!Array.isArray(data.threads) || !Array.isArray(data.pinnedThreads)) throw fault('PROTOCOL_INVALID','parse',{tool,requestState:'received',deliveryState:'failed'});
@@ -125,8 +126,11 @@ async function query(command, threadId = '', options = {}) {
       throw fault('THREAD_NOT_FOUND','lookup',{tool,requestState:'received',deliveryState:'failed'});
     const thread = pick(data.thread,['id','title','status','hostId','cwd','updatedAt']);
     const turns = (data.turns ?? []).slice(0,turnLimit).map(t => ({...pick(t,['id','status','startedAt','completedAt']),
+      ...(t.error?{nativeError:{...pick(envelope(remoteFault(t.error,'native_turn',{requestId})),
+        ['errorCode','stage','source','observedAt','requestId','nativeCode','causeFingerprint','reasonCode','error']),
+        requestPurpose:'observation'}}:{}),
       ...(command === 'read' ? {messages:publicMessages(t.items,messageLimit,maxChars),subagents:relatedAgents(t.items)} : {})}));
-    return {...base, thread, compactState:describe(data), recentTurnIds:(data.turns??[]).slice(0,2).map(t=>t.id), latestTurn:turns[0]?pick(turns[0],['id','status','startedAt','completedAt']):null,
+    return {...base, thread, compactState:describe(data), recentTurnIds:(data.turns??[]).slice(0,2).map(t=>t.id), latestTurn:turns[0]?pick(turns[0],['id','status','startedAt','completedAt','nativeError']):null,
       ...(command === 'read' ? {turns, page:data.page} : {})};
   } catch(e){
     e.tool ??= tool;e.source ??= 'codex-desktop-live';e.observedAt ??= new Date().toISOString();e.requestId ??= `hermes-query-${randomUUID()}`;

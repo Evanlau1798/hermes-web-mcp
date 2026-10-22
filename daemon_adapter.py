@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from context_usage import read_context_usage
 from daemon_rpc import DaemonRPC, DaemonError, identity
 from resume_settings import read_resume_settings
+from codex_failure import error_details
 
 UUID = re.compile(r'^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$',re.I)
 
@@ -61,6 +62,11 @@ class DaemonAdapter:
         items = turn.get('items')
         known = isinstance(items,list)
         latest = {k:turn[k] for k in ('id','status','startedAt','completedAt') if k in turn}
+        if turn.get('error'):
+            latest['nativeError']=error_details(turn['error'],'native_turn',turn.get('id'))
+            latest['nativeError'].update(requestPurpose='observation',source='codex-daemon-live')
+            if isinstance(client,DaemonRPC):
+                latest['nativeError']['requestId']='daemon-rpc-'+str(client.sequence)
         result = {'source':'codex-daemon-live','observedAt':datetime.now(timezone.utc).isoformat(),
             'thread':{'id':thread_id,'title':thread.get('name'),'status':thread['status'],
                       'cwd':thread.get('cwd'),'model':thread.get('model'),'hostId':'local'},
@@ -180,6 +186,7 @@ class DaemonAdapter:
                         'automaticRetrySafe':False}
         except DaemonError as exc:
             return {**failure(exc.code,exc.sent and dispatched),
+                    'error_details':error_details(exc,'request'),
                     'execution_backend':'daemon','backend_instance_id':locals().get('instance')}
         except (OSError,ValueError,KeyError,TypeError):
             return failure('DAEMON_PROTOCOL_ERROR',dispatched)

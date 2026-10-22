@@ -49,11 +49,12 @@ function remoteFault(value, stage, details={}) {
   const code=value?.code===-32601?'CAPABILITY_UNAVAILABLE':classify(raw);
   const nativeCode=value?.code ?? value?.error?.code;
   return fault(code,stage,{requestState:'rejected',deliveryState:'failed',
+    ...(/logged out or signed in to another account/i.test(raw)?{reasonCode:'AUTH_ACCOUNT_CHANGED'}:{}),
     causeFingerprint:createHash('sha256').update(raw).digest('hex').slice(0,16),
     ...(typeof nativeCode==='number' || typeof nativeCode==='string' && /^[A-Z][A-Z0-9_]{1,48}$/.test(nativeCode)?{nativeCode}:{}),...details});
 }
 function envelope(e, defaults={}) {
-  const keys=['code','stage','source','observedAt','requestId','tool','nativeCode','causeFingerprint',
+  const keys=['code','stage','source','observedAt','requestId','tool','nativeCode','causeFingerprint','reasonCode',
     'timedOut','disconnected','automaticRetrySafe','retryable','suggestedAction','requestState','deliveryState','threadId','nativeLimit','accessibleCount'];
   const result={ok:false,...defaults,...Object.fromEntries(keys.filter(k=>e[k]!==undefined).map(k=>[k,e[k]]))};
   result.errorCode=result.code ?? 'BRIDGE_ERROR';

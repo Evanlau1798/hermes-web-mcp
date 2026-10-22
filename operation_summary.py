@@ -1,4 +1,5 @@
 """Explain existing receipts without turning accepted or a newer turn into completion."""
+from codex_failure import error_details, stored_details
 
 
 def summarize(row):
@@ -21,8 +22,9 @@ def observe_turn(api, row):
         data = api('status', {'thread_id': row['thread_id'], **binding})
         thread = data.get('thread') or {}
         if data.get('error') or data.get('errorCode') or data.get('ok') is False or thread.get('id') != row['thread_id'] \
-                or thread.get('status', {}).get('type') not in ('idle', 'active'):
-            return {'state': 'unknown', 'errorCode': data.get('errorCode') or 'OBSERVATION_FAILED'}
+                or thread.get('status', {}).get('type') not in ('idle', 'active','systemError'):
+            return {'state': 'unknown', 'errorCode': data.get('errorCode') or 'OBSERVATION_FAILED',
+                    'error_details':error_details(data,'observe_turn')}
         turn = (data.get('operationTurn') if row.get('native_turn_id') else None) or data.get('latestTurn') or {}
         if row.get('native_turn_id') and turn.get('id')!=row['native_turn_id']:
             return {'state':'unknown','correlation':'native_turn_not_in_latest_snapshot',
@@ -33,9 +35,11 @@ def observe_turn(api, row):
         state = {'inProgress': 'started', 'completed': 'complete', 'failed': 'failed',
                  'interrupted': 'interrupted'}.get(turn.get('status'), 'unknown')
         return {'state': state, 'turn_id': turn['id'], 'native_turn_status': turn.get('status'),
+                **({'error_details':error_details(turn.get('nativeError') or turn.get('error'),'observe_turn',turn['id'])}
+                   if state in ('failed','interrupted') and (turn.get('nativeError') or turn.get('error')) else {}),
                 'correlation': 'native_turn_id' if row.get('native_turn_id') else 'newer_than_baseline_only'}
-    except Exception:
-        return {'state': 'unknown', 'errorCode': 'OBSERVATION_FAILED'}
+    except Exception as exc:
+        return {'state': 'unknown', 'errorCode': 'OBSERVATION_FAILED','error_details':error_details(exc,'observe_turn')}
 
 
 def compact_receipt(row, worker_alive=False):
@@ -56,7 +60,8 @@ def compact_receipt(row, worker_alive=False):
             'state': row['state'], 'worker_alive': worker_alive,
             'compact_complete': bool(row['compact_complete']), 'delivery_state': row['delivery_state'],
             'reconfirmation_required': row['state'] == 'interrupted',
-            'errorCode': row['error_code'], 'created_at': row['created_at'],
+            'errorCode': row['error_code'], 'error_details':stored_details(row.get('error_details')),
+            'created_at': row['created_at'],
             'updated_at': row['updated_at'], 'confirmed_at': row['confirmed_at'],
             'compact_started_at': row['compact_started_at'],
             'summary': summarize(row), 'compact_completed_at': row['compact_completed_at'],

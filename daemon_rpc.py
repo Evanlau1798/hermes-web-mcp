@@ -13,11 +13,13 @@ import psutil
 from websockets.client import ClientProtocol
 from websockets.frames import Frame, OP_TEXT, OP_CONT
 from websockets.uri import parse_uri
+from codex_failure import error_details
 
 
 class DaemonError(Exception):
-    def __init__(self, code, sent=False):
+    def __init__(self, code, sent=False, details=None):
         self.code, self.sent = code, sent
+        self.details=details or {}
         super().__init__(code)
 
 
@@ -167,16 +169,22 @@ class DaemonRPC:
                         self.pending_messages.pop(i)
                         if 'error' in event:
                             native = event['error']
+                            details=error_details(native,'request')
+                            details.update(nativeCode=native.get('code'),nativeMethod=method,requestId='daemon-rpc-'+str(request_id))
                             code = 'DAEMON_CAPABILITY_UNAVAILABLE' if native.get('code')==-32601 else (
                                 'BACKEND_WRITER_CONFLICT' if 'active writer' in str(native.get('message','')) else 'DAEMON_REJECTED')
-                            raise DaemonError(code,False)
+                            if details['errorCode'] in ('AUTHENTICATION_REQUIRED','BACKEND_WRITER_CONFLICT'):
+                                code=details['errorCode']
+                            raise DaemonError(code,False,error_details({**details,'errorCode':code},'request'))
                         return event['result']
                 # Unrelated notifications are not persisted or accumulated during RPC calls.
                 self.pending_messages = [e for e in self.pending_messages if 'id' in e]
                 self._receive(deadline-time.monotonic())
         except DaemonError as exc:
-            if exc.code not in ('DAEMON_REJECTED','DAEMON_CAPABILITY_UNAVAILABLE','BACKEND_WRITER_CONFLICT'):
+            if exc.code not in ('DAEMON_REJECTED','DAEMON_CAPABILITY_UNAVAILABLE','BACKEND_WRITER_CONFLICT','AUTHENTICATION_REQUIRED'):
                 exc.sent = sent
+            if not exc.details:
+                exc.details=error_details({'errorCode':exc.code,'nativeMethod':method,'requestId':'daemon-rpc-'+str(request_id)},'request')
             raise
         except (OSError,ValueError,KeyError):
             raise DaemonError('DAEMON_PROTOCOL_ERROR',sent) from None
