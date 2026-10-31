@@ -49,7 +49,7 @@ async def main():
             logging.error('MCP tool failed: %s', params.name)
             return types.CallToolResult(content=[types.TextContent(type='text', text='工具執行失敗；結果未確認，勿自動重送。')], is_error=True)
 
-    server = Server('Hermes Local Tools', version='0.1.0', instructions=INSTRUCTIONS,
+    server = Server('Hermes Local Tools', version='0.1.1', instructions=INSTRUCTIONS,
                     on_list_tools=list_tools, on_call_tool=call_tool)
     try:
         async with stdio_server() as (reader, writer):

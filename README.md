@@ -1,5 +1,7 @@
 # Hermes 私人 MCP 使用指南
 
+目前 Web MCP 版本為 **0.1.1**；版本回執來自 MCP initialize，部署快照見 deploy/versions.json。
+
 Hermes MCP 預設供 ChatGPT Web 使用。Web 對話涉及 Hermes、Codex 或 Windows 本機操作時，先呼叫 `hermes_context`，再依任務選擇工具；ChatGPT 負責推理，Hermes 提供本機工具。
 
 本機原生 Codex 預設使用自己的檔案、終端、瀏覽器及對話工具；只有人類使用者明確要求使用 Hermes 整合時，才調用此 MCP。獲得此明確要求後，同樣先呼叫 `hermes_context` 初始化。以下操作指南適用於已選用本整合的對話。
@@ -80,6 +82,8 @@ output 保留原生合併輸出，stdout 提供同值別名，streams_merged=tru
 網站操作依任務條件有界等待目標內容，不能只以 URL 或 load 判定就緒。逾時先查原程序與原分頁目前狀態，已達成就接續，仍載入則在總預算內等待；不盲目重播結果不明的動作。資料擷取逐欄核對同一主實體的來源，排除引用／回覆混入作者、時間或正文；來源矛盾標記未確認。完整流程見 [browser use 技能](skills/software-development/hermes-web-mcp-workflows/references/browser.md)，採跨網站規則，不保存特定網站 DOM。
 
 Web 截圖顯示使用 [MCP 圖片範例](skills/software-development/hermes-web-mcp-workflows/references/mcp-images.md)：保留完整回傳，在同一次宿主執行取 `content_items`（或標準 `content` 陣列）的原生圖片，呼叫圖片 helper 並核對；之後再結束 TaskSpace。`structuredContent`／JSON 文字只含狀態，圖片不在文字日誌中；`image_count=1` 不代表已顯示。不新增圖片快取或讀檔接口。
+
+`image_delivery` 區分附圖、先前交付、等待完成回執、未產生與錯誤；宿主顯示與目視核對仍需另外確認。log 只補文字，不消耗截圖；依 next_action 分頁後以 poll 取得首次完成圖片。截圖前有界等待本步必要媒體解碼及可見，不將 spinner 當結果。動作、等待與下一步所需的有界觀測可合併在同次 run；選擇器歧義重新定位，不略過 SDK 拒絕。引用只採本次核實來源，原文與翻譯分開。
 
 | action | 使用方式 |
 | --- | --- |
@@ -180,8 +184,10 @@ Codex 工具每次查證 Desktop／既有 daemon 的持有端；Desktop 關閉�
 
 ```powershell
 & $env:HERMES_MCP_PYTHON -m unittest discover
-node --test test_codex_input.cjs codex-status/test.cjs codex-status/test_diagnostics.cjs codex-status/test_cli.cjs
+node --test test_browser_guidance.cjs test_codex_input.cjs codex-status/test.cjs codex-status/test_diagnostics.cjs codex-status/test_cli.cjs
 & $env:HERMES_MCP_PYTHON smoke.py
 ```
+
+已安裝 Ego Lite 時另執行 `& $env:HERMES_MCP_PYTHON browser_smoke.py`：透過真實 stdio MCP 與獨立 TaskSpace 驗證合成 SPA、延遲媒體、引用欄位歸屬、歧義拒絕、中文輸入及原生圖片。只在 loopback 啟動暫時測試頁，結束關閉服務與測試 Space；截圖留在忽略的 tmp/ 供核對。這不代替 ChatGPT Web 宿主顯示驗收。
 
 先依部署文件將 `HERMES_MCP_PYTHON` 設為已安裝的 PM Python。CLI 傳訊同樣使用此設定，未設定才使用 PATH 的 `python`；測試不控制真實 Desktop session。`smoke.py` 另啟本機 stdio 與可丟棄程序，不會重載已運作的 Tunnel。

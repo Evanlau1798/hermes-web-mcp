@@ -119,7 +119,7 @@ class Bridge:
         self._add('hermes_task_review', '任務收尾判斷：submit 記錄無新學習、已有規則覆蓋或新通用經驗；read 查回執。修正判斷先 read，再帶 expected_version。只記錄 Agent 判斷，技能更新另用 skill_manage。',
                   copy.deepcopy(REVIEW_SCHEMA), False)
         from browser_adapter import SCHEMA as BROWSER_SCHEMA
-        self._add('browser_use', 'browser use：先讀 context.browser_use.guide，guide 完整讀目前版本 Ego 官方指南；run 執行 JavaScript 開頁、快照、點擊、輸入與截圖。同任務沿用 TaskSpace，有界等待主內容，逾時先查原狀態。截圖前讀 references/mcp-images.md，從原回傳 content_items／content 陣列以宿主 image helper 顯示核對，再另呼叫 finish。長操作沿原 session_id 查 process_read。', copy.deepcopy(BROWSER_SCHEMA), False)
+        self._add('browser_use', 'browser use：先讀 context.browser_use.guide 與完整官方 guide，再 run JavaScript。同任務沿用 TaskSpace；動作後有界等待同一主實體／必要媒體就緒，回傳有界觀測，定位才取 snapshot。截圖前讀 mcp-images.md；從原回傳 content_items／content 圖塊在宿主顯示核對，再另呼叫 finish。依 next_action 沿原 session_id 查詢／分頁；log 只補文字，圖片交付看 image_delivery，並非宿主已顯示。逾時先查原狀態。', copy.deepcopy(BROWSER_SCHEMA), False)
         self.specs['browser_use']['title'] = 'browser use'
         from compact_tools import PREPARE, CONFIRM, STATUS
         self._add('codex_prepare_send', 'codex_send 的相容別名：相同 operation_id 共用同一協調流程與回執，推薦直接用 codex_send。以 operation_status 查結果，不另派送。',
@@ -418,6 +418,7 @@ class Bridge:
                 result = terminal_receipt(result)
             if tool == 'process_manage' and self.browser and arguments.get('session_id'):
                 browser_result = self.browser.collect(arguments['session_id'], result,
+                    deliver_images=arguments['action'] in ('poll', 'wait'),
                     read_log=lambda args: self.native('process_manage', args, approval_callback=approve,
                                                       task_id=self.owner, session_id=self.owner))
                 if browser_result is not None:

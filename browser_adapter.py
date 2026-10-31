@@ -61,7 +61,7 @@ class BrowserAdapter:
             executable = ego_executable()
             if args['action'] == 'run':
                 if len(self.runs) >= 128:
-                    raise ValueError('請先查詢既有 browser use 程序至完成，再開始新操作。')
+                    raise ValueError('未清理的 browser use 程序已達上限；先核對既有程序與 TaskSpace 結果，再處理殘留目錄。')
                 _guard_original(args['code'], {'timeout': 30}, owner)
                 self.root.mkdir(parents=True, exist_ok=True)
                 folder = Path(tempfile.mkdtemp(prefix='round-', dir=self.root))
@@ -115,13 +115,14 @@ class BrowserAdapter:
                 **({'session_id': session} if session else {}),
                 'outcome': 'unknown' if started else 'not-sent'}), [])
 
-    def collect(self, session, result, read_log=None):
+    def collect(self, session, result, read_log=None, *, deliver_images=True):
         from backend import safe_result
         folder = self.runs.get(session)
         if folder is None and session not in self.sessions:
             return None
         result = {**result, 'session_id': session, 'automaticRetrySafe': False}
         completed = result.get('status') in ('exited', 'completed', 'already_exited')
+        abnormal = completed and result.get('completion_reason', 'exited') != 'exited'
         if completed and read_log and session not in self.head_reads and 'log_page' not in result \
                 and (result.get('output_cut', 0) or 'output_preview' in result):
             self.head_reads.add(session)
@@ -149,7 +150,7 @@ class BrowserAdapter:
                     'complete_history_available':lost == 0,
                     'notice':'原生緩衝已淘汰較早輸出，無法完整還原歷史。' if lost else '僅保證目前保留的滾動緩衝。'}
                 if lost: result['truncated'] = True
-        if folder is not None and result.get('status') in ('exited', 'completed', 'already_exited') \
+        if deliver_images and folder is not None and completed \
                 and result.get('completion_reason', 'exited') == 'exited':
             image = folder / 'screenshot.png'
             try:
@@ -170,10 +171,23 @@ class BrowserAdapter:
                 if cleanup_error:
                     result['cleanup_error'] = cleanup_error
         result['image_count'] = len(images)
+        state = ('outcome_unknown' if abnormal else 'attached' if images else 'unavailable' if result.get('image_error') else
+                 'delivered_previously' if session in self.images_delivered else
+                 'pending_completion_receipt' if session in self.runs else 'not_produced')
+        result['image_delivery'] = {'state': state, 'host_display': 'unverified',
+                                    'visual_verification': 'unverified'}
+        if abnormal:
+            result['image_delivery']['reason'] = 'CLI 異常終止不證明瀏覽器腳本停止；保留本輪目錄，於原 TaskSpace 唯讀核對結果與晚到副作用，不重送操作。'
         from browser_output import format_result
         result = format_result(result, session, self.sessions.get(session, {}))
+        if abnormal and result.get('next_action', {}).get('arguments', {}).get('action') == 'poll':
+            result.pop('next_action')
+        if not abnormal and not deliver_images and session in self.runs and 'next_action' not in result:
+            result['next_action'] = {'tool':'hermes_process_read',
+                                    'arguments':{'action':'poll','session_id':session}}
         payload = safe_result(result)
-        payload.update(session_id=session, automaticRetrySafe=False, image_count=len(images))
+        payload.update(session_id=session, automaticRetrySafe=False, image_count=len(images),
+                       image_delivery=result['image_delivery'])
         return ComputerResult(payload, images)
 
     def _cleanup(self, session):

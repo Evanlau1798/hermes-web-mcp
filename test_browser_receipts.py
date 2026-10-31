@@ -10,6 +10,69 @@ import runtime
 
 
 class BrowserReceiptTests(unittest.TestCase):
+    def test_abnormal_exit_does_not_promise_completion_or_loop_polling(self):
+        with tempfile.TemporaryDirectory() as directory:
+            adapter = BrowserAdapter(Path(directory))
+            folder = Path(directory)/'round'
+            folder.mkdir()
+            (folder/'screenshot.png').write_bytes(b'\x89PNG\r\n\x1a\nfixture')
+            adapter.runs['owned'] = folder
+            adapter.sessions['owned'] = {}
+            for action in ('kill','log','poll'):
+                with self.subTest(action=action):
+                    result = adapter.collect('owned', {'status':'exited','exit_code':-1,
+                        'completion_reason':'killed','output':'last'}, deliver_images=action=='poll')
+                    self.assertEqual(result.images, [])
+                    self.assertEqual(result.payload['image_delivery']['state'], 'outcome_unknown')
+                    self.assertNotIn('next_action', result.payload)
+                    self.assertTrue(folder.exists(), 'CLI exit cannot authorize deleting a live script')
+                    self.assertFalse(result.payload['automaticRetrySafe'])
+
+    def test_text_log_never_consumes_pending_image_or_cleans_round(self):
+        with tempfile.TemporaryDirectory() as directory:
+            adapter = BrowserAdapter(Path(directory))
+            folder = Path(directory)/'round'
+            folder.mkdir()
+            (folder/'screenshot.png').write_bytes(b'\x89PNG\r\n\x1a\nfixture')
+            adapter.runs['owned'] = folder
+            adapter.sessions['owned'] = {}
+            logged = adapter.collect('owned', {'status':'exited','output':'text'}, deliver_images=False)
+            self.assertEqual(logged.images, [])
+            self.assertTrue(folder.exists())
+            self.assertEqual(logged.payload['image_delivery']['state'], 'pending_completion_receipt')
+            self.assertEqual(logged.payload['next_action']['arguments'], {'action':'poll','session_id':'owned'})
+            done = adapter.collect('owned', {'status':'exited','exit_code':0})
+            self.assertEqual(len(done.images), 1)
+            self.assertEqual(done.payload['image_delivery'], {'state':'attached',
+                'host_display':'unverified','visual_verification':'unverified'})
+            again = adapter.collect('owned', {'status':'exited','exit_code':0})
+            self.assertEqual(again.images, [])
+            self.assertEqual(again.payload['image_delivery']['state'], 'delivered_previously')
+
+    def test_bridge_log_dispatch_keeps_image_for_completion_poll(self):
+        import threading
+        from types import SimpleNamespace
+        with tempfile.TemporaryDirectory() as directory:
+            native = Mock(side_effect=[{'output':'text','total_lines':1},
+                {'status':'exited','output':'text','exit_code':0}])
+            bridge = Bridge(native=native)
+            self.addCleanup(bridge.close)
+            bridge.browser = BrowserAdapter(Path(directory))
+            folder = Path(directory)/'round'
+            folder.mkdir()
+            (folder/'screenshot.png').write_bytes(b'\x89PNG\r\n\x1a\nfixture')
+            bridge.browser.runs['owned'] = folder
+            bridge.browser.sessions['owned'] = {}
+            session = SimpleNamespace(owner_task_id=bridge.owner, _lock=threading.Lock(),
+                total_output_chars=4, output_buffer='text')
+            with patch('backend.process_registry.get', return_value=session):
+                log = bridge.call('hermes_process_read', {'action':'log','session_id':'owned'})
+                self.assertEqual(log.images, [])
+                self.assertEqual(log.payload['next_action']['arguments']['action'], 'poll')
+                done = bridge.call('hermes_process_read', {'action':'poll','session_id':'owned'})
+            self.assertEqual(len(done.images), 1)
+            self.assertEqual(native.call_count, 2)
+
     def test_evicted_native_buffer_is_never_reported_as_complete_history(self):
         import threading
         from types import SimpleNamespace

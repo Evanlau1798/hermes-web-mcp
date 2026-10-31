@@ -2,6 +2,8 @@
 
 這份 runbook 重建 ChatGPT Web → 私人 Tunnel → Hermes 工具的環境，包括 Codex Desktop 橋接、Computer Use、共用記憶介面及登入啟動。官方原始碼、依賴與工具由 `deploy/versions.json` 指定的公開來源和 lockfile 還原；自訂實作在此 repo。
 
+Web MCP 0.1.1 增加 image_delivery 回執，文字日誌不消耗完成圖片；Ego／Hermes 上游版本未變。MCP initialize.serverInfo.version 與 deploy/versions.json 的 webMcp 必須一致。通用 Browser Use 驗收可執行 browser_smoke.py；不依賴網站登入，也不執行 Ego 升級。
+
 本庫不保存金鑰、登入憑證、私人外掛／Tunnel ID、人設、記憶、對話或個人專案。CLI／Gateway 的模型、Discord、語音及其他服務需另外配置，不屬於 Web MCP 執行鏈。
 
 ## 檔案與配置邊界
@@ -173,7 +175,7 @@ $entry = Join-Path ([Environment]::GetFolderPath('Startup')) 'Hermes_Local_Tools
 ```powershell
 New-Item -ItemType Directory -Path .\tmp -Force | Out-Null
 & $env:HERMES_MCP_PYTHON -m unittest discover
-node --test test_codex_input.cjs codex-status/test.cjs codex-status/test_diagnostics.cjs codex-status/test_cli.cjs
+node --test test_browser_guidance.cjs test_codex_input.cjs codex-status/test.cjs codex-status/test_diagnostics.cjs codex-status/test_cli.cjs
 & $env:HERMES_MCP_PYTHON smoke.py
 ```
 

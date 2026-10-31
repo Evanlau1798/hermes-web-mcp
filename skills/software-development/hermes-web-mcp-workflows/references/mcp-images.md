@@ -28,8 +28,10 @@ for (const picture of pictures) {
 ## 核對、失敗及清理順序
 
 1. Ego 腳本截圖後先回傳；在 Web 宿主立即顯示並實際核對圖片中的內容，再以後續 browser_use 呼叫結束同一 TaskSpace。不要把 finish 放在截圖腳本裡，然後才嘗試解析圖片。
-2. 尚在 running／等待逾時時，沿原 session_id 查到首次完成回執；不要平行重啟腳本。僅有 image_count=1 或路徑不證明圖片已顯示。
+2. 尚在 running／等待逾時時，沿原 session_id 查到首次完成回執；不要平行重啟腳本。log 只補文字、不消耗截圖；依 next_action 接續分頁或 poll。image_delivery.state=attached 表示本回執有原生圖塊，delivered_previously 表示先前已交付，不會重送；pending_completion_receipt 尚待完成回執，not_produced／unavailable 表示未產生／交付失敗。host_display 與 visual_verification 由工具一律標為 unverified，需宿主實際顯示與 Agent 核對。僅有 image_count=1 或路徑不證明圖片已顯示；媒體就緒見 browser.md。
 3. 已收到圖片但 helper 失敗時，優先在同一次宿主執行用原始區塊修正顯示呼叫；若宿主有跨次保留 API，可按其文件暫存原回傳。不可假設每個宿主都有 store，也不能以後續 poll／log 取代已消耗的首次圖片。
 4. 診斷只列外層 key、陣列長度與圖片欄位的型別／長度；不要把陣列元素或 data 直接放進診斷 JSON。若原回傳已不可用，回報缺口，不自動重跑瀏覽動作或宣稱已目視驗證。確認不再需要測試頁面後，再清理 Space。
+
+異常終止回執 image_delivery.state=outcome_unknown 不再提示持續 poll；CLI 被停止不證明瀏覽器腳本停止。本輪目錄保留供診斷，先在原 TaskSpace 唯讀核對結果與晚到副作用，確認安全後才處理殘留目錄，不重送原操作。
 
 驗收須同時確認 MCP 有圖片區塊、helper 已執行、Web 中實際出現圖片，以及讀圖結果正確。只有截圖成功時標記「已擷取，尚未視覺核對」。圖片不經一般文字日誌回傳，不新增圖片快取或額外讀檔入口。
